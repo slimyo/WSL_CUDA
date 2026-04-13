@@ -1,0 +1,19 @@
+CompileFlags:
+  Add:
+    - -I/usr/local/cuda/include
+    - -I/usr/local/cuda/include/cccl
+    - -I/usr/local/cuda/include/nv           # 保险起见，加 nv/target
+    - --cuda-path=/usr/local/cuda-13.2
+    - -xcuda                                 # 告诉 clangd 这是 CUDA 模式（可选，但帮助大）
+
+  Remove:                                    # 可选：移除 clangd 不懂的 nvcc flag，避免警告
+    - --generate-code*
+    - -arch*
+    - -extended-lambda
+    - -forward-unknown-to-host-compiler
+
+If:
+  PathMatch: [.*\.cu, .*\.cuh]               # 只对 .cu / .cuh 文件应用（避免影响 .cpp）
+  CompileFlags:
+    Add:
+      - --cuda-gpu-arch=sm_75              # 匹配你的 compute_75，如果 GPU 不同改成对应（如 sm_89）
