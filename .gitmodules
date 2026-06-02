@@ -1,0 +1,3 @@
+[submodule "third_party/LeetCUDA"]
+	path = third_party/LeetCUDA
+	url = https://github.com/xlite-dev/LeetCUDA.git
