@@ -189,3 +189,7 @@ Thumbs.db
 *.sql
 *.sqlite
 *.db
+.codegraph
+
+##其他
+*.env
