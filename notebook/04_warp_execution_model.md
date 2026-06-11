@@ -362,6 +362,7 @@ hideable_latency_TLP = active_warps × issue_interval
   → 实际 LDG 延迟 ~400 cycles → 还有 272 cycles 无法隐藏
 ```
 
+- 默认假设每次发射的指令都是要造成长cycle等待的。
 **结论: TLP 单独不足以完全隐藏 GMEM 延迟。** 必须结合 ILP 和 MLP。
 
 #### 6.3.2 ILP — Instruction-Level Parallelism (指令级并行)

@@ -30,8 +30,8 @@ for each Q_block:
         // online softmax 更新 (m, d)
         m_new = max(m, rowmax(S_block))
         d_new = d * exp(m - m_new) + rowsum(exp(S_block - m_new))
-        // 重新缩放旧 O 并累加新结果
-        O_block = diag(exp(m-m_new)) * O_block * exp(m-m_new)
+        // 重新缩放旧 O 并累加新结果 (rescale 只乘一次!)
+        O_block = O_block * exp(m - m_new)
                 + exp(S_block - m_new) × V_block
         m = m_new, d = d_new
     O[Q_block] = O_block / d   (最终 normalize)
@@ -46,9 +46,11 @@ for each Q_block:
 Q 和 O 留 on-chip, K/V 流式加载。简单但 shared memory 压力大。
 
 ### Split Q (FA-2 风格)
-沿 head_dim 分块 Q: `for each Q_slice`
-每个 warp 独立处理部分 head_dim, 减少 shared memory, 提升 occupancy。
-LeetCUDA 实现的是 FA-2 风格。
+仍沿 **seqlen** 切，但换"谁拥有并行维"：每个 thread block 负责一个 Q_block
+（grid 多了 seq 维 → 长序列也能喂满 SM），block 内各 warp 分到不同的 Q 行，
+独占自己的输出行 → 内层 KV 循环中 warp 间零通信，SMEM 压力小、occupancy 高。
+（注意：不是沿 head_dim 切！head_dim 整个留在寄存器/SMEM 里。）
+LeetCUDA 实现的是 FA-2 风格。详细对比见 10_flashattention_deep_dive.md §3。
 
 ## 4. 学习路线
 
