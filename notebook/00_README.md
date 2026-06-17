@@ -85,6 +85,17 @@
 | 05 | [triton/05_internals_debug.md](triton/05_internals_debug.md) | 编译管线 (TTIR/TTGIR/PTX)、调试、性能排查 |
 | 06 | [triton/06_exercises.md](triton/06_exercises.md) | 12 道阶梯练习 + 验收标准 |
 
+### 开源项目源码精读 (理论学完后，对照真实代码)
+
+| 优先级 | 文件 | 项目 | 一句话 |
+|:---:|------|------|------|
+| 🥇 | [source_reading/01_vllm/README.md](source_reading/01_vllm/README.md) | vLLM | V1 引擎，覆盖调度/PagedKV/量化/分布式/投机解码 |
+| 🥈 | [source_reading/02_sglang/README.md](source_reading/02_sglang/README.md) | SGLang | RadixAttention + P/D 分离生产实现，对比 vLLM |
+| 🥉 | [source_reading/03_flashinfer/README.md](source_reading/03_flashinfer/README.md) | FlashInfer | vLLM/SGLang 共用的 attention/MLA/MoE kernel 底层 |
+| 4 | [source_reading/04_deepseek_infra/README.md](source_reading/04_deepseek_infra/README.md) | FlashMLA/DeepEP/DeepGEMM | MLA/大EP/FP8 GEMM 工业实现 |
+
+> 总览见 [source_reading/00_README.md](source_reading/00_README.md)。
+
 ### 实战项目 (1-2 月，理论学完后做)
 
 | 文件 | 项目 | 周期 |
