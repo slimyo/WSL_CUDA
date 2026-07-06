@@ -1,9 +1,17 @@
 # vLLM 源码精读
 
 > 仓库：[vllm-project/vllm](https://github.com/vllm-project/vllm)，默认分支 `main`。
-> fetch 时间：2026-06-16（通过 GitHub API 拉取目录树确认）。
+> 本地：`third_party/vllm/`（submodule，浅克隆），pin commit `3d20275`（2026-06-17 核对路径全部存在）。
+> 源码主目录 `third_party/vllm/vllm/v1/`，下文路径均相对仓库根。
 > **重要背景**：vLLM 已完成 V0→V1 引擎重写，所有新代码在 `vllm/v1/` 下；
 > 旧的 `vllm/core/`、`vllm/worker/` 之类的 V0 路径已基本退役/精简，**不要再按网上 2023-2024 年的老博客找路径**。
+>
+> 本地速查（在仓库根 `third_party/vllm/` 下执行）：
+> ```bash
+> ls vllm/v1/core/ vllm/v1/core/sched/ vllm/v1/attention/ vllm/v1/spec_decode/
+> grep -rn "def schedule" vllm/v1/core/sched/scheduler.py   # 调度主函数
+> grep -rln "fused_moe" vllm/model_executor/layers/fused_moe/
+> ```
 
 ---
 
@@ -63,5 +71,17 @@
 
 - V1 目录里还有大量未在上表列出的子系统（`compilation/` 对应 `torch.compile` 集成、`structured_output/`
   对应 [22](../../22_sampling_decoding.md) §4 constrained decoding、`lora/` 等），先吃完上表再按需扩展。
-- 路径可能随版本漂移，使用前用 `curl -s https://api.github.com/repos/vllm-project/vllm/contents/<path>`
-  或直接在 GitHub 网页确认文件还在。
+- 路径可能随版本漂移，使用前用 `git -C third_party/vllm log -1 -- <path>` 或 GitHub 网页确认文件还在。
+
+**2026-06-17 本地核对补充（pin `3d20275`）：**
+
+- **`vllm/v1/spec_decode/` 比上表新增了不少 proposer**：除 `eagle.py`/`medusa.py`/`ngram_proposer*.py`/`draft_model.py` 外，
+  还有 `suffix_decoding.py`（后缀自动机式猜测）、`dflash.py`、`dynamic/`（运行时动态选 proposer）、
+  `custom_class_proposer.py`/`llm_base_proposer.py`（可插拔自定义草稿）。说明投机解码已从"单一 EAGLE"演进成**多 proposer 可切换框架**，
+  对应 [22](../../22_sampling_decoding.md) §3"草稿来源不止小模型"。
+- **vLLM 直接消费 DeepGEMM**：`vllm/model_executor/layers/fused_moe/` 是个目录，里面有 `deep_gemm_utils.py`、
+  `experts/`、`config.py`、`all2all_utils.py`、`expert_map_manager.py` 等——即 [04_deepseek_infra](../04_deepseek_infra/README.md) 的 DeepGEMM
+  和 EP 思路在 vLLM 里有真实落地，是"框架↔专精算子库"互相引用的活证据，面试时可点出"vLLM 的 MoE FP8 路径直接接了 DeepSeek 的 DeepGEMM"。
+- **`vllm/distributed/` 比上表更细**：除 `parallel_state.py`/`device_communicators/`/`eplb/`/`kv_transfer/` 外，
+  还新增 `elastic_ep/`（弹性专家并行，呼应 DeepEP 的 `elastic/`）、`ec_transfer/`、`weight_transfer/`、`stateless_coordinator.py`，
+  对应 [16](../../16_distributed.md) + [18](../../18_frontier_2025_2026.md)"大 EP 弹性伸缩"。

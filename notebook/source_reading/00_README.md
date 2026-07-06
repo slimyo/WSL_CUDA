@@ -4,8 +4,12 @@
 > 面试官问"vLLM 的 PagedAttention 怎么实现的"，要求你能答出大概在哪个文件、关键结构是什么，
 > 而不是只会背 SOSP'23 论文的图。
 >
-> 本目录每个项目一个文件夹，记录时间：**2026-06-16**（仓库结构会持续变化，
-> 笔记里标注的文件路径请定期用 `git log -1` 或 GitHub 网页核对是否还在）。
+> 本目录每个项目一个文件夹，记录时间：**2026-06-16**，源码 submodule 克隆并核对路径：**2026-06-17**
+> （仓库结构会持续变化，笔记里标注的文件路径请定期用 `git submodule status` 看 pin 的 commit，
+> 或 `git -C third_party/<repo> log -1` 核对是否还在）。
+>
+> **2026-06-17 pin 的 commit**：vllm `3d20275`、sglang `3fb65eb`、flashinfer `2ec0c9b`、
+> FlashMLA `9241ae3`、DeepEP `af9a040`、DeepGEMM `88965b0`。本目录所有路径已对照这些 commit 逐一核实存在。
 
 ---
 
@@ -35,14 +39,58 @@
 4. **常见面试追问 + 这份代码怎么答**。
 5. **版本说明**：记录 fetch 时间和分支，防止"代码已经改了笔记没改"的错觉。
 
-读的时候建议开两个窗口：左边这份笔记，右边 GitHub 按路径直接跳转
-（`https://github.com/<org>/<repo>/blob/main/<path>`），不需要本地 clone 整个仓库——
-这些仓库都是数十万行级别，clone 下来也不会逐行看，按需在线读 + 笔记里记路径更高效。
-如果要本地调试/打断点，再针对单个模块 `git clone --depth 1 --filter=blob:none --sparse` 拉子目录。
+读的时候建议开两个窗口：左边这份笔记，右边对应源码按路径跳转。
 
-| 文件夹 | 项目 |
-|------|------|
-| [01_vllm/](01_vllm/README.md) | vLLM |
-| [02_sglang/](02_sglang/README.md) | SGLang |
-| [03_flashinfer/](03_flashinfer/README.md) | FlashInfer |
-| [04_deepseek_infra/](04_deepseek_infra/README.md) | FlashMLA / DeepEP / DeepGEMM |
+### 源码已作为 git submodule 克隆到本地 `third_party/`
+
+这些仓库已经像 `third_party/LeetCUDA` 一样，以**浅克隆（`--depth 1`）submodule** 的方式落到本地，
+方便用 `grep`/IDE 直接跳转、断点调试，不必每次去 GitHub 翻：
+
+| 文件夹 | 项目 | 本地路径 | 源码主目录 |
+|------|------|------|------|
+| [01_vllm/](01_vllm/README.md) | vLLM | `third_party/vllm/` | `vllm/v1/` |
+| [02_sglang/](02_sglang/README.md) | SGLang | `third_party/sglang/` | `python/sglang/srt/` |
+| [03_flashinfer/](03_flashinfer/README.md) | FlashInfer | `third_party/flashinfer/` | `include/flashinfer/` + `flashinfer/` |
+| [04_deepseek_infra/](04_deepseek_infra/README.md) | FlashMLA / DeepEP / DeepGEMM | `third_party/{FlashMLA,DeepEP,DeepGEMM}/` | 各自 `csrc/` 或 `deep_gemm/` |
+
+```bash
+# 别人首次 clone 本仓库后，拉取所有 submodule（含上述源码）：
+git submodule update --init --depth 1
+
+# 只把某个仓库更新到最新（浅克隆，省时间/空间）：
+git -C third_party/vllm pull --depth 1 origin main
+
+# 查看当前 pin 的 commit（笔记里标的文件路径以此 commit 为准）：
+git submodule status
+```
+
+> **为什么用 `--depth 1`**：这些仓库都是数十万行级别、git 历史巨大，但我们只读当前代码、不看历史，
+> 浅克隆能把 vLLM/SGLang 从 GB 级压到 ~100MB。`.gitmodules` 里已对它们标了 `shallow = true`。
+> 各项目 README 顶部记录了**克隆时 pin 的 commit hash**；仓库结构会持续漂移，
+> 笔记里的文件路径若对不上，先 `git submodule status` 看本地 commit，再 `git -C third_party/<repo> pull --depth 1` 更新。
+>
+> 在线阅读仍可用 `https://github.com/<org>/<repo>/blob/main/<path>`，与本地路径一一对应。
+
+### 用 understand-anything 给 submodule 生成代码知识图谱
+
+已安装 Claude Code 插件 [`understand-anything`](https://github.com/Lum1104/Understand-Anything)（marketplace `Lum1104/Understand-Anything`），
+其 `/understand` 技能能对一个目录跑 7 阶段流水线，产出 `.understand-anything/knowledge-graph.json`（节点=文件/类/函数，
+边=imports/contains/inherits，外加架构分层 + 导览），再用 `/understand-dashboard` 可视化浏览。
+
+```bash
+# 对某个子目录生成中文知识图谱（在 Claude Code 里执行）：
+/understand third_party/vllm/vllm/v1/core --language zh
+# 看图：
+/understand-dashboard third_party/vllm/vllm/v1/core
+```
+
+已跑过的产物快照存在 [`understand_graphs/`](understand_graphs/) 下（如 [`vllm_v1_core/`](understand_graphs/vllm_v1_core/README.md)，2026-06-17）。
+
+> **⚠️ 关键陷阱：分析大仓库的"子目录"时，`projectRoot` 必须是"包根"，否则内部依赖边全部丢失。**
+> 这些项目里的文件用的是**绝对包导入**（`from vllm.v1.core.kv_cache_utils import ...`，而非相对 `from .kv_cache_utils`）。
+> 若直接 `/understand third_party/vllm/vllm/v1/core`，导入解析器会把包路径当作相对该子目录解析 → 找不到文件 → `imports` 边解析出 **0 条**。
+> 解决：把分析根设到**能让 `vllm.x.y` 解析成真实文件**的那一层（即 `third_party/vllm/`），或接受 importMap 退化为按文件数分批
+> （后续 LLM 读源码阶段仍能补回部分关系，但结构边会缺）。给 SGLang（`from sglang.srt...`）、FlashInfer 等同理。
+>
+> 另外：`.understand-anything/` 会写进对应 **submodule 的工作区**（未跟踪文件，不影响主仓库提交）；
+> 不想污染 submodule 可把它加进 `third_party/<repo>/.git/info/exclude`，或只保留 `understand_graphs/` 下的快照副本。

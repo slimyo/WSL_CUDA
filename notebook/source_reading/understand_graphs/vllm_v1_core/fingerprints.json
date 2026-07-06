@@ -1,0 +1,2329 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "3d20275bb4d434f53055c3c0b645fd8bb072965e",
+  "generatedAt": "2026-06-17T13:13:49.835Z",
+  "files": {
+    "__init__.py": {
+      "filePath": "__init__.py",
+      "contentHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1,
+      "hasStructuralAnalysis": true
+    },
+    "block_pool.py": {
+      "filePath": "block_pool.py",
+      "contentHash": "a2158b6d520ead7cecb1c18f472c16d7f2256a2258eb810f0c62288de3ad5dbb",
+      "functions": [],
+      "classes": [
+        {
+          "name": "BlockHashToBlockMap",
+          "methods": [
+            "__init__",
+            "get_one_block",
+            "insert",
+            "pop",
+            "__len__",
+            "_unexpected_blocks_type"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 94
+        },
+        {
+          "name": "BlockPool",
+          "methods": [
+            "__init__",
+            "get_cached_block",
+            "cache_full_blocks",
+            "get_new_blocks",
+            "_maybe_evict_cached_block",
+            "touch",
+            "free_blocks",
+            "evict_blocks",
+            "reset_prefix_cache",
+            "get_num_free_blocks",
+            "get_usage",
+            "take_events"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 398
+        }
+      ],
+      "imports": [
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Iterable",
+            "Sequence"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "vllm.distributed.kv_events",
+          "specifiers": [
+            "MEDIUM_GPU",
+            "AllBlocksCleared",
+            "BlockRemoved",
+            "BlockStored",
+            "KVCacheEvent"
+          ]
+        },
+        {
+          "source": "vllm.logger",
+          "specifiers": [
+            "init_logger"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_metrics",
+          "specifiers": [
+            "KVCacheMetricsCollector"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_utils",
+          "specifiers": [
+            "BlockHash",
+            "BlockHashList",
+            "BlockHashListWithBlockSize",
+            "BlockHashWithGroupId",
+            "ExternalBlockHash",
+            "FreeKVCacheBlockQueue",
+            "KVCacheBlock",
+            "generate_block_hash_extra_keys",
+            "get_block_hash",
+            "get_group_id",
+            "make_block_hash_with_group_id",
+            "maybe_convert_block_hash"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request"
+          ]
+        }
+      ],
+      "exports": [
+        "BlockHashToBlockMap",
+        "BlockPool"
+      ],
+      "totalLines": 528,
+      "hasStructuralAnalysis": true
+    },
+    "encoder_cache_manager.py": {
+      "filePath": "encoder_cache_manager.py",
+      "contentHash": "04c2c303859d47933572901e32ee5499fc504d7e5e4cf714dfa70771affb96ce",
+      "functions": [
+        {
+          "name": "compute_mm_encoder_budget",
+          "params": [
+            "scheduler_config",
+            "mm_max_toks_per_item"
+          ],
+          "returnType": "tuple[int, int]",
+          "exported": true,
+          "lineCount": 48
+        }
+      ],
+      "classes": [
+        {
+          "name": "EncoderCacheManager",
+          "methods": [
+            "__init__",
+            "reset",
+            "check_and_update_cache",
+            "can_allocate",
+            "allocate",
+            "get_cached_input_ids",
+            "free_encoder_input",
+            "free",
+            "get_freed_mm_hashes"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 250
+        },
+        {
+          "name": "EncoderDecoderCacheManager",
+          "methods": [
+            "__init__",
+            "reset",
+            "check_and_update_cache",
+            "can_allocate",
+            "allocate",
+            "free",
+            "get_cached_input_ids",
+            "get_freed_mm_hashes",
+            "free_encoder_input"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 59
+        }
+      ],
+      "imports": [
+        {
+          "source": "collections",
+          "specifiers": [
+            "OrderedDict"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Mapping"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "TYPE_CHECKING"
+          ]
+        },
+        {
+          "source": "vllm.logger",
+          "specifiers": [
+            "init_logger"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request"
+          ]
+        }
+      ],
+      "exports": [
+        "EncoderCacheManager",
+        "compute_mm_encoder_budget",
+        "EncoderDecoderCacheManager"
+      ],
+      "totalLines": 382,
+      "hasStructuralAnalysis": true
+    },
+    "kv_cache_coordinator.py": {
+      "filePath": "kv_cache_coordinator.py",
+      "contentHash": "279a7f019581c176da1395f950c8bddae513166022151c32b098332e6a975f31",
+      "functions": [
+        {
+          "name": "_validate_prefix_cache_retention_interval",
+          "params": [
+            "retention_interval",
+            "scheduler_block_size",
+            "kv_cache_config"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "get_kv_cache_coordinator",
+          "params": [
+            "kv_cache_config",
+            "max_model_len",
+            "max_num_batched_tokens",
+            "use_eagle",
+            "enable_caching",
+            "enable_kv_cache_events",
+            "dcp_world_size",
+            "pcp_world_size",
+            "scheduler_block_size",
+            "hash_block_size",
+            "metrics_collector"
+          ],
+          "returnType": "KVCacheCoordinator",
+          "exported": true,
+          "lineCount": 53
+        }
+      ],
+      "classes": [
+        {
+          "name": "KVCacheCoordinator",
+          "methods": [
+            "__init__",
+            "get_num_blocks_to_allocate",
+            "allocate_new_computed_blocks",
+            "allocate_new_blocks",
+            "cache_blocks",
+            "free",
+            "pop_blocks_for_free",
+            "get_num_common_prefix_blocks",
+            "remove_skipped_blocks",
+            "get_blocks",
+            "find_longest_cache_hit",
+            "new_step_starts"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 306
+        },
+        {
+          "name": "KVCacheCoordinatorNoPrefixCache",
+          "methods": [
+            "__init__",
+            "get_num_common_prefix_blocks",
+            "find_longest_cache_hit"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 48
+        },
+        {
+          "name": "UnitaryKVCacheCoordinator",
+          "methods": [
+            "__init__",
+            "find_longest_cache_hit"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 70
+        },
+        {
+          "name": "SpecGroup",
+          "methods": [],
+          "properties": [
+            "spec",
+            "group_ids",
+            "manager_cls",
+            "use_eagle"
+          ],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "HybridKVCacheCoordinator",
+          "methods": [
+            "__init__",
+            "verify_and_split_kv_cache_groups",
+            "cache_blocks",
+            "find_longest_cache_hit",
+            "find_longest_cache_hit_per_group"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 266
+        }
+      ],
+      "imports": [
+        {
+          "source": "abc",
+          "specifiers": [
+            "ABC",
+            "abstractmethod"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Sequence"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "NamedTuple"
+          ]
+        },
+        {
+          "source": "vllm",
+          "specifiers": [
+            "envs"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.block_pool",
+          "specifiers": [
+            "BlockPool"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_metrics",
+          "specifiers": [
+            "KVCacheMetricsCollector"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_utils",
+          "specifiers": [
+            "BlockHash",
+            "BlockHashList",
+            "BlockHashListWithBlockSize",
+            "KVCacheBlock"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.single_type_kv_cache_manager",
+          "specifiers": [
+            "CrossAttentionManager",
+            "SingleTypeKVCacheManager",
+            "get_manager_for_kv_cache_spec"
+          ]
+        },
+        {
+          "source": "vllm.v1.kv_cache_interface",
+          "specifiers": [
+            "FullAttentionSpec",
+            "KVCacheConfig",
+            "KVCacheSpec",
+            "SlidingWindowSpec"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request"
+          ]
+        }
+      ],
+      "exports": [
+        "_validate_prefix_cache_retention_interval",
+        "KVCacheCoordinator",
+        "KVCacheCoordinatorNoPrefixCache",
+        "UnitaryKVCacheCoordinator",
+        "SpecGroup",
+        "HybridKVCacheCoordinator",
+        "get_kv_cache_coordinator"
+      ],
+      "totalLines": 826,
+      "hasStructuralAnalysis": true
+    },
+    "kv_cache_manager.py": {
+      "filePath": "kv_cache_manager.py",
+      "contentHash": "2e91e77f84dfd9d4bed79f50392be72559207f54e845a3d3402baf88dc529320",
+      "functions": [],
+      "classes": [
+        {
+          "name": "KVCacheBlocks",
+          "methods": [
+            "__add__",
+            "get_block_ids",
+            "get_block_ids",
+            "get_block_ids",
+            "get_unhashed_block_ids",
+            "get_unhashed_block_ids_all_groups",
+            "new_empty"
+          ],
+          "properties": [
+            "blocks"
+          ],
+          "exported": true,
+          "lineCount": 82
+        },
+        {
+          "name": "KVCacheManager",
+          "methods": [
+            "__init__",
+            "usage",
+            "make_prefix_cache_stats",
+            "get_computed_blocks",
+            "allocate_slots",
+            "free",
+            "remove_skipped_blocks",
+            "pop_blocks_for_free",
+            "evict_blocks",
+            "reset_prefix_cache",
+            "get_num_common_prefix_blocks",
+            "take_events",
+            "get_blocks",
+            "get_block_ids",
+            "cache_blocks",
+            "create_kv_cache_blocks",
+            "take_new_block_ids",
+            "new_step_starts"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 505
+        }
+      ],
+      "imports": [
+        {
+          "source": "itertools",
+          "specifiers": [
+            "itertools"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Sequence"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Literal",
+            "overload"
+          ]
+        },
+        {
+          "source": "vllm.distributed.kv_events",
+          "specifiers": [
+            "BlockStored",
+            "KVCacheEvent"
+          ]
+        },
+        {
+          "source": "vllm.logger",
+          "specifiers": [
+            "init_logger"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_coordinator",
+          "specifiers": [
+            "get_kv_cache_coordinator"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_metrics",
+          "specifiers": [
+            "KVCacheMetricsCollector"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_utils",
+          "specifiers": [
+            "KVCacheBlock"
+          ]
+        },
+        {
+          "source": "vllm.v1.kv_cache_interface",
+          "specifiers": [
+            "KVCacheConfig",
+            "get_kv_cache_spec_kind",
+            "get_kv_cache_spec_sliding_window"
+          ]
+        },
+        {
+          "source": "vllm.v1.metrics.stats",
+          "specifiers": [
+            "PrefixCacheStats"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request",
+            "RequestStatus"
+          ]
+        }
+      ],
+      "exports": [
+        "KVCacheBlocks",
+        "KVCacheManager"
+      ],
+      "totalLines": 615,
+      "hasStructuralAnalysis": true
+    },
+    "kv_cache_metrics.py": {
+      "filePath": "kv_cache_metrics.py",
+      "contentHash": "efedec04feff5f04a6d51c6c464290b52ab8c249d65121a9ab9f1370d6b67f47",
+      "functions": [],
+      "classes": [
+        {
+          "name": "BlockMetricsState",
+          "methods": [
+            "__init__",
+            "record_access",
+            "get_lifetime_seconds",
+            "get_idle_time_seconds",
+            "get_reuse_gaps_seconds"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "KVCacheMetricsCollector",
+          "methods": [
+            "__init__",
+            "should_sample_block",
+            "on_block_allocated",
+            "on_block_accessed",
+            "on_block_evicted",
+            "reset",
+            "drain_events"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 51
+        }
+      ],
+      "imports": [
+        {
+          "source": "random",
+          "specifiers": [
+            "random"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "deque"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "TYPE_CHECKING"
+          ]
+        },
+        {
+          "source": "vllm.v1.metrics.stats",
+          "specifiers": [
+            "KVCacheEvictionEvent"
+          ]
+        }
+      ],
+      "exports": [
+        "BlockMetricsState",
+        "KVCacheMetricsCollector"
+      ],
+      "totalLines": 97,
+      "hasStructuralAnalysis": true
+    },
+    "kv_cache_utils.py": {
+      "filePath": "kv_cache_utils.py",
+      "contentHash": "c23d934414e9694b908328263f488ab76ca77272cae673e2ff496f0f43178a4e",
+      "functions": [
+        {
+          "name": "make_block_hash_with_group_id",
+          "params": [
+            "block_hash",
+            "group_id"
+          ],
+          "returnType": "BlockHashWithGroupId",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "get_block_hash",
+          "params": [
+            "key"
+          ],
+          "returnType": "BlockHash",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "get_group_id",
+          "params": [
+            "key"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "maybe_convert_block_hash",
+          "params": [
+            "hash_bytes"
+          ],
+          "returnType": "ExternalBlockHash",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "init_none_hash",
+          "params": [
+            "hash_fn"
+          ],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "need_extra_keys",
+          "params": [
+            "request"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "_gen_mm_extra_hash_keys",
+          "params": [
+            "request",
+            "start_token_idx",
+            "end_token_idx",
+            "start_mm_idx"
+          ],
+          "returnType": "tuple[list[Any], int]",
+          "exported": true,
+          "lineCount": 65
+        },
+        {
+          "name": "_gen_lora_extra_hash_keys",
+          "params": [
+            "request"
+          ],
+          "returnType": "list[str]",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "_gen_prompt_embeds_extra_hash_keys",
+          "params": [
+            "request",
+            "start_token_idx",
+            "end_token_idx"
+          ],
+          "returnType": "list[bytes]",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "generate_block_hash_extra_keys",
+          "params": [
+            "request",
+            "start_token_idx",
+            "end_token_idx",
+            "start_mm_idx"
+          ],
+          "returnType": "tuple[tuple[Any, ...] | None, int]",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "hash_block_tokens",
+          "params": [
+            "hash_function",
+            "parent_block_hash",
+            "curr_block_token_ids",
+            "extra_keys"
+          ],
+          "returnType": "BlockHash",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "resolve_kv_cache_block_sizes",
+          "params": [
+            "kv_cache_config",
+            "vllm_config"
+          ],
+          "returnType": "tuple[int, int]",
+          "exported": true,
+          "lineCount": 64
+        },
+        {
+          "name": "get_request_block_hasher",
+          "params": [
+            "block_size",
+            "caching_hash_fn"
+          ],
+          "returnType": "Callable[[Request], list[BlockHash]]",
+          "exported": true,
+          "lineCount": 52
+        },
+        {
+          "name": "_check_enough_kv_cache_memory",
+          "params": [
+            "available_memory",
+            "get_needed_memory",
+            "max_model_len",
+            "estimate_max_model_len"
+          ],
+          "exported": true,
+          "lineCount": 38
+        },
+        {
+          "name": "max_memory_usage_bytes",
+          "params": [
+            "vllm_config",
+            "kv_cache_specs"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "estimate_max_model_len",
+          "params": [
+            "vllm_config",
+            "kv_cache_spec",
+            "available_memory"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 52
+        },
+        {
+          "name": "check_enough_kv_cache_memory",
+          "params": [
+            "vllm_config",
+            "kv_cache_spec",
+            "available_memory"
+          ],
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "create_kv_cache_group_specs",
+          "params": [
+            "kv_cache_spec",
+            "grouped_layer_names"
+          ],
+          "returnType": "list[KVCacheGroupSpec]",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "is_kv_cache_spec_uniform",
+          "params": [
+            "kv_cache_spec"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "get_max_concurrency_for_kv_cache_config",
+          "params": [
+            "vllm_config",
+            "kv_cache_config"
+          ],
+          "returnType": "float",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "may_override_num_blocks",
+          "params": [
+            "vllm_config",
+            "num_blocks"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "_pool_bytes_per_block",
+          "params": [
+            "kv_cache_groups"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "get_num_blocks",
+          "params": [
+            "vllm_config",
+            "num_layers",
+            "available_memory",
+            "page_size"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "get_uniform_page_size",
+          "params": [
+            "kv_cache_specs"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "_get_kv_cache_groups_uniform_spec",
+          "params": [
+            "kv_cache_specs"
+          ],
+          "returnType": "list[KVCacheGroupSpec]",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "_get_kv_cache_groups_uniform_type",
+          "params": [
+            "spec"
+          ],
+          "returnType": "list[KVCacheGroupSpec]",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "is_kv_cache_page_size_uniform",
+          "params": [
+            "kv_cache_spec"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "unify_kv_cache_spec_page_size",
+          "params": [
+            "kv_cache_spec"
+          ],
+          "returnType": "dict[str, KVCacheSpec]",
+          "exported": true,
+          "lineCount": 38
+        },
+        {
+          "name": "is_kv_cache_type_attention_free",
+          "params": [
+            "kv_cache_spec"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "_get_kv_cache_groups_uniform_page_size",
+          "params": [
+            "kv_cache_spec"
+          ],
+          "returnType": "list[KVCacheGroupSpec]",
+          "exported": true,
+          "lineCount": 120
+        },
+        {
+          "name": "_bucket_layers_by_page_size",
+          "params": [
+            "kv_cache_groups"
+          ],
+          "returnType": "dict[int, list[list[str]]]",
+          "exported": true,
+          "lineCount": 23
+        },
+        {
+          "name": "_get_kv_cache_config_deepseek_v4",
+          "params": [
+            "vllm_config",
+            "kv_cache_groups",
+            "available_memory"
+          ],
+          "returnType": "tuple[int, list[KVCacheTensor]]",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "get_kv_cache_config_from_groups",
+          "params": [
+            "vllm_config",
+            "kv_cache_groups",
+            "available_memory"
+          ],
+          "returnType": "KVCacheConfig",
+          "exported": true,
+          "lineCount": 86
+        },
+        {
+          "name": "unify_hybrid_kv_cache_specs",
+          "params": [
+            "kv_cache_spec"
+          ],
+          "exported": true,
+          "lineCount": 94
+        },
+        {
+          "name": "group_and_unify_kv_cache_specs",
+          "params": [
+            "kv_cache_spec"
+          ],
+          "returnType": "list[UniformTypeKVCacheSpecs] | None",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "_approximate_gcd",
+          "params": [
+            "values",
+            "lower_bound"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "_get_kv_cache_groups_uniform_groups",
+          "params": [
+            "grouped_specs"
+          ],
+          "returnType": "list[KVCacheGroupSpec]",
+          "exported": true,
+          "lineCount": 99
+        },
+        {
+          "name": "_annotate_eagle_groups_deepseek_v4",
+          "params": [
+            "vllm_config",
+            "kv_cache_spec",
+            "kv_cache_groups"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "get_kv_cache_groups",
+          "params": [
+            "vllm_config",
+            "kv_cache_spec"
+          ],
+          "returnType": "list[KVCacheGroupSpec]",
+          "exported": true,
+          "lineCount": 67
+        },
+        {
+          "name": "generate_scheduler_kv_cache_config",
+          "params": [
+            "kv_cache_configs"
+          ],
+          "returnType": "KVCacheConfig",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "get_kv_cache_capacity",
+          "params": [
+            "vllm_config",
+            "kv_cache_config"
+          ],
+          "returnType": "tuple[int, float]",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "_max_memory_usage_bytes_from_groups",
+          "params": [
+            "vllm_config",
+            "kv_cache_groups"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 61
+        },
+        {
+          "name": "_estimate_max_model_len_from_groups",
+          "params": [
+            "vllm_config",
+            "kv_cache_groups",
+            "available_memory"
+          ],
+          "returnType": "int",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "_auto_fit_max_model_len",
+          "params": [
+            "vllm_config",
+            "projected_groups_per_worker",
+            "available_memory"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 62
+        },
+        {
+          "name": "_project_kv_cache_groups_to_worker",
+          "params": [
+            "global_kv_cache_groups",
+            "worker_spec"
+          ],
+          "returnType": "list[KVCacheGroupSpec]",
+          "exported": true,
+          "lineCount": 40
+        },
+        {
+          "name": "get_kv_cache_configs",
+          "params": [
+            "vllm_config",
+            "kv_cache_specs",
+            "available_memory"
+          ],
+          "returnType": "list[KVCacheConfig]",
+          "exported": true,
+          "lineCount": 149
+        }
+      ],
+      "classes": [
+        {
+          "name": "KVCacheBlock",
+          "methods": [
+            "block_hash",
+            "block_hash",
+            "reset_hash",
+            "__repr__"
+          ],
+          "properties": [
+            "block_id",
+            "ref_cnt",
+            "_block_hash",
+            "prev_free_block",
+            "next_free_block",
+            "is_null"
+          ],
+          "exported": true,
+          "lineCount": 46
+        },
+        {
+          "name": "FreeKVCacheBlockQueue",
+          "methods": [
+            "__init__",
+            "popleft",
+            "popleft_n",
+            "remove",
+            "append",
+            "prepend_n",
+            "append_n",
+            "get_all_free_blocks"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 230
+        },
+        {
+          "name": "BlockHashListWithBlockSize",
+          "methods": [
+            "__init__",
+            "__len__",
+            "__getitem__",
+            "__getitem__",
+            "__getitem__",
+            "__iter__",
+            "_get_value_at"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 68
+        }
+      ],
+      "imports": [
+        {
+          "source": "copy",
+          "specifiers": [
+            "copy"
+          ]
+        },
+        {
+          "source": "hashlib",
+          "specifiers": [
+            "hashlib"
+          ]
+        },
+        {
+          "source": "math",
+          "specifiers": [
+            "math"
+          ]
+        },
+        {
+          "source": "os",
+          "specifiers": [
+            "os"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "defaultdict"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Callable",
+            "Iterable",
+            "Iterator",
+            "Sequence"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass",
+            "replace"
+          ]
+        },
+        {
+          "source": "functools",
+          "specifiers": [
+            "partial"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "NewType",
+            "TypeAlias",
+            "cast",
+            "overload"
+          ]
+        },
+        {
+          "source": "vllm",
+          "specifiers": [
+            "envs"
+          ]
+        },
+        {
+          "source": "vllm.config",
+          "specifiers": [
+            "VllmConfig"
+          ]
+        },
+        {
+          "source": "vllm.logger",
+          "specifiers": [
+            "init_logger"
+          ]
+        },
+        {
+          "source": "vllm.utils.hashing",
+          "specifiers": [
+            "sha256_cbor",
+            "xxhash_cbor"
+          ]
+        },
+        {
+          "source": "vllm.utils.math_utils",
+          "specifiers": [
+            "cdiv",
+            "round_up"
+          ]
+        },
+        {
+          "source": "vllm.utils.mem_utils",
+          "specifiers": [
+            "format_gib"
+          ]
+        },
+        {
+          "source": "vllm.utils.torch_utils",
+          "specifiers": [
+            "get_dtype_size"
+          ]
+        },
+        {
+          "source": "vllm.v1.kv_cache_interface",
+          "specifiers": [
+            "ChunkedLocalAttentionSpec",
+            "FullAttentionSpec",
+            "HiddenStateCacheSpec",
+            "KVCacheConfig",
+            "KVCacheGroupSpec",
+            "KVCacheSpec",
+            "KVCacheTensor",
+            "MambaSpec",
+            "MLAAttentionSpec",
+            "SlidingWindowMLASpec",
+            "SlidingWindowSpec",
+            "UniformTypeKVCacheSpecs"
+          ]
+        },
+        {
+          "source": "vllm.v1.kv_cache_spec_registry",
+          "specifiers": [
+            "KVCacheSpecRegistry"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request"
+          ]
+        },
+        {
+          "source": "vllm.v1.utils",
+          "specifiers": [
+            "tensor_data"
+          ]
+        }
+      ],
+      "exports": [
+        "make_block_hash_with_group_id",
+        "get_block_hash",
+        "get_group_id",
+        "maybe_convert_block_hash",
+        "init_none_hash",
+        "KVCacheBlock",
+        "FreeKVCacheBlockQueue",
+        "need_extra_keys",
+        "_gen_mm_extra_hash_keys",
+        "_gen_lora_extra_hash_keys",
+        "_gen_prompt_embeds_extra_hash_keys",
+        "generate_block_hash_extra_keys",
+        "hash_block_tokens",
+        "resolve_kv_cache_block_sizes",
+        "get_request_block_hasher",
+        "_check_enough_kv_cache_memory",
+        "max_memory_usage_bytes",
+        "estimate_max_model_len",
+        "check_enough_kv_cache_memory",
+        "create_kv_cache_group_specs",
+        "is_kv_cache_spec_uniform",
+        "get_max_concurrency_for_kv_cache_config",
+        "may_override_num_blocks",
+        "_pool_bytes_per_block",
+        "get_num_blocks",
+        "get_uniform_page_size",
+        "_get_kv_cache_groups_uniform_spec",
+        "_get_kv_cache_groups_uniform_type",
+        "is_kv_cache_page_size_uniform",
+        "unify_kv_cache_spec_page_size",
+        "is_kv_cache_type_attention_free",
+        "_get_kv_cache_groups_uniform_page_size",
+        "_bucket_layers_by_page_size",
+        "_get_kv_cache_config_deepseek_v4",
+        "get_kv_cache_config_from_groups",
+        "unify_hybrid_kv_cache_specs",
+        "group_and_unify_kv_cache_specs",
+        "_approximate_gcd",
+        "_get_kv_cache_groups_uniform_groups",
+        "_annotate_eagle_groups_deepseek_v4",
+        "get_kv_cache_groups",
+        "generate_scheduler_kv_cache_config",
+        "get_kv_cache_capacity",
+        "_max_memory_usage_bytes_from_groups",
+        "_estimate_max_model_len_from_groups",
+        "_auto_fit_max_model_len",
+        "_project_kv_cache_groups_to_worker",
+        "get_kv_cache_configs",
+        "BlockHashListWithBlockSize"
+      ],
+      "totalLines": 2159,
+      "hasStructuralAnalysis": true
+    },
+    "sched/__init__.py": {
+      "filePath": "sched/__init__.py",
+      "contentHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1,
+      "hasStructuralAnalysis": true
+    },
+    "sched/async_scheduler.py": {
+      "filePath": "sched/async_scheduler.py",
+      "contentHash": "da6343d7e7c394a1738cf72905cbecc208003ffa461ccb441268333a3eb9f884",
+      "functions": [],
+      "classes": [
+        {
+          "name": "AsyncScheduler",
+          "methods": [
+            "__init__",
+            "_update_after_schedule",
+            "_update_request_with_output"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 64
+        }
+      ],
+      "imports": [
+        {
+          "source": "vllm.logger",
+          "specifiers": [
+            "init_logger"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.sched.output",
+          "specifiers": [
+            "SchedulerOutput"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.sched.scheduler",
+          "specifiers": [
+            "Scheduler"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request",
+            "RequestStatus"
+          ]
+        }
+      ],
+      "exports": [
+        "AsyncScheduler"
+      ],
+      "totalLines": 76,
+      "hasStructuralAnalysis": true
+    },
+    "sched/interface.py": {
+      "filePath": "sched/interface.py",
+      "contentHash": "abee13a3d933224d4ff7575e6796171f8b2bb1b5948b95a996f99e48c1f12a1f",
+      "functions": [],
+      "classes": [
+        {
+          "name": "PauseState",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "SchedulerInterface",
+          "methods": [
+            "__init__",
+            "schedule",
+            "get_grammar_bitmask",
+            "update_from_output",
+            "update_draft_token_ids",
+            "update_draft_token_ids_in_output",
+            "add_request",
+            "finish_requests",
+            "get_num_unfinished_requests",
+            "has_unfinished_requests",
+            "has_finished_requests",
+            "has_requests",
+            "pause_state",
+            "set_pause_state",
+            "reset_prefix_cache",
+            "reset_encoder_cache",
+            "get_request_counts",
+            "make_stats",
+            "shutdown",
+            "get_kv_connector"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 215
+        }
+      ],
+      "imports": [
+        {
+          "source": "enum",
+          "specifiers": [
+            "enum"
+          ]
+        },
+        {
+          "source": "abc",
+          "specifiers": [
+            "ABC",
+            "abstractmethod"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Iterable"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "TYPE_CHECKING"
+          ]
+        },
+        {
+          "source": "vllm.multimodal",
+          "specifiers": [
+            "MULTIMODAL_REGISTRY",
+            "MultiModalRegistry"
+          ]
+        }
+      ],
+      "exports": [
+        "PauseState",
+        "SchedulerInterface"
+      ],
+      "totalLines": 251,
+      "hasStructuralAnalysis": true
+    },
+    "sched/output.py": {
+      "filePath": "sched/output.py",
+      "contentHash": "3582c05c44e56b244afdab7635b01739699be24a1de85ad79dc92ce4ce0fe914",
+      "functions": [],
+      "classes": [
+        {
+          "name": "NewRequestData",
+          "methods": [
+            "from_request",
+            "__repr__",
+            "anon_repr"
+          ],
+          "properties": [
+            "req_id",
+            "prompt_token_ids",
+            "mm_features",
+            "sampling_params",
+            "pooling_params",
+            "block_ids",
+            "num_computed_tokens",
+            "lora_request",
+            "prompt_embeds",
+            "prompt_is_token_ids",
+            "prefill_token_ids"
+          ],
+          "exported": true,
+          "lineCount": 78
+        },
+        {
+          "name": "CachedRequestData",
+          "methods": [
+            "anon_repr",
+            "__repr__",
+            "num_reqs",
+            "_req_id_to_num_output_tokens",
+            "is_context_phase",
+            "make_empty"
+          ],
+          "properties": [
+            "req_ids",
+            "resumed_req_ids",
+            "new_token_ids",
+            "all_token_ids",
+            "new_block_ids",
+            "num_computed_tokens",
+            "num_output_tokens"
+          ],
+          "exported": true,
+          "lineCount": 66
+        },
+        {
+          "name": "SchedulerOutput",
+          "methods": [
+            "make_empty"
+          ],
+          "properties": [
+            "scheduled_new_reqs",
+            "scheduled_cached_reqs",
+            "num_scheduled_tokens",
+            "total_num_scheduled_tokens",
+            "scheduled_spec_decode_tokens",
+            "scheduled_encoder_inputs",
+            "num_common_prefix_blocks",
+            "finished_req_ids",
+            "free_encoder_mm_hashes",
+            "preempted_req_ids",
+            "has_structured_output_requests",
+            "pending_structured_output_tokens",
+            "num_invalid_spec_tokens",
+            "kv_connector_metadata",
+            "ec_connector_metadata",
+            "new_block_ids_to_zero",
+            "num_spec_tokens_to_schedule"
+          ],
+          "exported": true,
+          "lineCount": 79
+        },
+        {
+          "name": "GrammarOutput",
+          "methods": [],
+          "properties": [
+            "structured_output_request_ids",
+            "grammar_bitmask"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "dataclass"
+          ]
+        },
+        {
+          "source": "functools",
+          "specifiers": [
+            "cached_property"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "TYPE_CHECKING"
+          ]
+        }
+      ],
+      "exports": [
+        "NewRequestData",
+        "CachedRequestData",
+        "SchedulerOutput",
+        "GrammarOutput"
+      ],
+      "totalLines": 268,
+      "hasStructuralAnalysis": true
+    },
+    "sched/request_queue.py": {
+      "filePath": "sched/request_queue.py",
+      "contentHash": "4b8d938e5fb8152fe61030b8aa991f983fcac9a405c37ed8908045e05e82ae5e",
+      "functions": [
+        {
+          "name": "create_request_queue",
+          "params": [
+            "policy"
+          ],
+          "returnType": "RequestQueue",
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "classes": [
+        {
+          "name": "SchedulingPolicy",
+          "methods": [],
+          "properties": [],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "RequestQueue",
+          "methods": [
+            "add_request",
+            "pop_request",
+            "peek_request",
+            "prepend_request",
+            "prepend_requests",
+            "remove_request",
+            "remove_requests",
+            "__bool__",
+            "__len__",
+            "__iter__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 53
+        },
+        {
+          "name": "FCFSRequestQueue",
+          "methods": [
+            "add_request",
+            "pop_request",
+            "peek_request",
+            "prepend_request",
+            "prepend_requests",
+            "remove_request",
+            "remove_requests",
+            "__bool__",
+            "__len__",
+            "__iter__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 54
+        },
+        {
+          "name": "PriorityRequestQueue",
+          "methods": [
+            "__init__",
+            "add_request",
+            "pop_request",
+            "peek_request",
+            "prepend_request",
+            "prepend_requests",
+            "remove_request",
+            "remove_requests",
+            "__bool__",
+            "__len__",
+            "__iter__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 68
+        }
+      ],
+      "imports": [
+        {
+          "source": "heapq",
+          "specifiers": [
+            "heapq"
+          ]
+        },
+        {
+          "source": "abc",
+          "specifiers": [
+            "ABC",
+            "abstractmethod"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "deque"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Iterable",
+            "Iterator"
+          ]
+        },
+        {
+          "source": "enum",
+          "specifiers": [
+            "Enum"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request"
+          ]
+        }
+      ],
+      "exports": [
+        "SchedulingPolicy",
+        "RequestQueue",
+        "FCFSRequestQueue",
+        "PriorityRequestQueue",
+        "create_request_queue"
+      ],
+      "totalLines": 209,
+      "hasStructuralAnalysis": true
+    },
+    "sched/scheduler.py": {
+      "filePath": "sched/scheduler.py",
+      "contentHash": "681ef56e51cdd63434d36f3906f724ed0c5c9580d3696200f5a541af9ed918b0",
+      "functions": [],
+      "classes": [
+        {
+          "name": "Scheduler",
+          "methods": [
+            "__init__",
+            "_mamba_block_aligned_split",
+            "schedule",
+            "_build_kv_connector_meta",
+            "_preempt_request",
+            "_update_after_schedule",
+            "_update_request_as_session",
+            "_make_cached_request_data",
+            "_try_schedule_encoder_inputs",
+            "get_grammar_bitmask",
+            "update_from_output",
+            "_is_blocked_waiting_status",
+            "_enqueue_waiting_request",
+            "_select_waiting_queue_for_scheduling",
+            "_handle_stopped_request",
+            "_update_request_with_output",
+            "_free_encoder_inputs",
+            "update_draft_token_ids",
+            "update_draft_token_ids_in_output",
+            "get_request_counts",
+            "add_request",
+            "finish_requests",
+            "_free_request",
+            "_free_blocks",
+            "pause_state",
+            "set_pause_state",
+            "_free_request_blocks",
+            "_drain_deferred_frees",
+            "get_num_unfinished_requests",
+            "has_finished_requests",
+            "has_requests",
+            "reset_prefix_cache",
+            "reset_connector_cache",
+            "reset_encoder_cache",
+            "make_stats",
+            "make_spec_decoding_stats",
+            "shutdown",
+            "get_kv_connector",
+            "_connector_finished",
+            "_request_remaining_blocks",
+            "_inflight_prefill_reserved_blocks",
+            "_update_waiting_for_remote_kv",
+            "_try_promote_blocked_waiting_request",
+            "_update_from_kv_xfer_finished",
+            "_update_requests_with_invalid_blocks",
+            "_handle_invalid_blocks"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 2551
+        }
+      ],
+      "imports": [
+        {
+          "source": "itertools",
+          "specifiers": [
+            "itertools"
+          ]
+        },
+        {
+          "source": "time",
+          "specifiers": [
+            "time"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "defaultdict",
+            "deque"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Iterable"
+          ]
+        },
+        {
+          "source": "dataclasses",
+          "specifiers": [
+            "replace"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "vllm.compilation.cuda_graph",
+          "specifiers": [
+            "CUDAGraphStat"
+          ]
+        },
+        {
+          "source": "vllm.config",
+          "specifiers": [
+            "VllmConfig"
+          ]
+        },
+        {
+          "source": "vllm.distributed.ec_transfer.ec_connector.base",
+          "specifiers": [
+            "ECConnectorMetadata",
+            "ECConnectorRole"
+          ]
+        },
+        {
+          "source": "vllm.distributed.ec_transfer.ec_connector.factory",
+          "specifiers": [
+            "ECConnectorFactory"
+          ]
+        },
+        {
+          "source": "vllm.distributed.kv_events",
+          "specifiers": [
+            "EventPublisherFactory",
+            "KVEventBatch"
+          ]
+        },
+        {
+          "source": "vllm.distributed.kv_transfer.kv_connector.factory",
+          "specifiers": [
+            "KVConnectorFactory"
+          ]
+        },
+        {
+          "source": "vllm.distributed.kv_transfer.kv_connector.v1",
+          "specifiers": [
+            "KVConnectorBase_V1",
+            "KVConnectorRole",
+            "SupportsHMA"
+          ]
+        },
+        {
+          "source": "vllm.distributed.kv_transfer.kv_connector.v1.base",
+          "specifiers": [
+            "KVConnectorMetadata"
+          ]
+        },
+        {
+          "source": "vllm.distributed.kv_transfer.kv_connector.v1.metrics",
+          "specifiers": [
+            "KVConnectorStats"
+          ]
+        },
+        {
+          "source": "vllm.logger",
+          "specifiers": [
+            "init_logger"
+          ]
+        },
+        {
+          "source": "vllm.model_executor.layers.fused_moe.routed_experts_capturer",
+          "specifiers": [
+            "RoutedExpertsManager"
+          ]
+        },
+        {
+          "source": "vllm.multimodal",
+          "specifiers": [
+            "MULTIMODAL_REGISTRY",
+            "MultiModalRegistry"
+          ]
+        },
+        {
+          "source": "vllm.multimodal.encoder_budget",
+          "specifiers": [
+            "MultiModalBudget"
+          ]
+        },
+        {
+          "source": "vllm.multimodal.utils",
+          "specifiers": [
+            "get_mm_features_in_window"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.encoder_cache_manager",
+          "specifiers": [
+            "EncoderCacheManager",
+            "EncoderDecoderCacheManager"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_coordinator",
+          "specifiers": [
+            "HybridKVCacheCoordinator"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_manager",
+          "specifiers": [
+            "KVCacheBlocks",
+            "KVCacheManager"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_metrics",
+          "specifiers": [
+            "KVCacheMetricsCollector"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_utils",
+          "specifiers": [
+            "KVCacheBlock"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.sched.interface",
+          "specifiers": [
+            "PauseState",
+            "SchedulerInterface"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.sched.output",
+          "specifiers": [
+            "CachedRequestData",
+            "GrammarOutput",
+            "NewRequestData",
+            "SchedulerOutput"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.sched.request_queue",
+          "specifiers": [
+            "RequestQueue",
+            "SchedulingPolicy",
+            "create_request_queue"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.sched.utils",
+          "specifiers": [
+            "check_stop",
+            "remove_all"
+          ]
+        },
+        {
+          "source": "vllm.v1.engine",
+          "specifiers": [
+            "EngineCoreEventType",
+            "EngineCoreOutput",
+            "EngineCoreOutputs"
+          ]
+        },
+        {
+          "source": "vllm.v1.kv_cache_interface",
+          "specifiers": [
+            "KVCacheConfig"
+          ]
+        },
+        {
+          "source": "vllm.v1.metrics.perf",
+          "specifiers": [
+            "ModelMetrics",
+            "PerfStats"
+          ]
+        },
+        {
+          "source": "vllm.v1.metrics.stats",
+          "specifiers": [
+            "PrefixCacheStats",
+            "SchedulerStats"
+          ]
+        },
+        {
+          "source": "vllm.v1.outputs",
+          "specifiers": [
+            "DraftTokenIds",
+            "KVConnectorOutput",
+            "ModelRunnerOutput"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request",
+            "RequestStatus",
+            "StreamingUpdate"
+          ]
+        },
+        {
+          "source": "vllm.v1.spec_decode.dynamic.utils",
+          "specifiers": [
+            "build_dynamic_sd_schedule_lookup"
+          ]
+        },
+        {
+          "source": "vllm.v1.spec_decode.metrics",
+          "specifiers": [
+            "SpecDecodingStats"
+          ]
+        },
+        {
+          "source": "vllm.v1.structured_output",
+          "specifiers": [
+            "StructuredOutputManager"
+          ]
+        },
+        {
+          "source": "vllm.v1.utils",
+          "specifiers": [
+            "record_function_or_nullcontext"
+          ]
+        }
+      ],
+      "exports": [
+        "Scheduler"
+      ],
+      "totalLines": 2619,
+      "hasStructuralAnalysis": true
+    },
+    "sched/utils.py": {
+      "filePath": "sched/utils.py",
+      "contentHash": "85e82eae555a03497ad2ac1540ed562a6c36fc26185aa6233725c914816aa1b3",
+      "functions": [
+        {
+          "name": "_has_repeating_pattern",
+          "params": [
+            "token_ids",
+            "pattern_len",
+            "repetition_min_count"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "check_sequence_repetition",
+          "params": [
+            "token_ids",
+            "params"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "remove_all",
+          "params": [
+            "lst",
+            "items_to_remove"
+          ],
+          "returnType": "list",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "check_stop",
+          "params": [
+            "request",
+            "max_model_len"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 37
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "contextlib",
+          "specifiers": [
+            "contextlib"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Sequence"
+          ]
+        },
+        {
+          "source": "vllm.sampling_params",
+          "specifiers": [
+            "RepetitionDetectionParams"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request",
+            "RequestStatus"
+          ]
+        }
+      ],
+      "exports": [
+        "_has_repeating_pattern",
+        "check_sequence_repetition",
+        "remove_all",
+        "check_stop"
+      ],
+      "totalLines": 131,
+      "hasStructuralAnalysis": true
+    },
+    "single_type_kv_cache_manager.py": {
+      "filePath": "single_type_kv_cache_manager.py",
+      "contentHash": "523f4f8b8d4de848a629b2dfb1d062ea0758f255dfc81acbd7a9cfbab025b563",
+      "functions": [
+        {
+          "name": "get_manager_for_kv_cache_spec",
+          "params": [
+            "kv_cache_spec",
+            "max_num_batched_tokens",
+            "max_model_len",
+            "**kwargs"
+          ],
+          "returnType": "SingleTypeKVCacheManager",
+          "exported": true,
+          "lineCount": 36
+        },
+        {
+          "name": "register_all_kvcache_specs",
+          "params": [
+            "vllm_config"
+          ],
+          "exported": true,
+          "lineCount": 59
+        }
+      ],
+      "classes": [
+        {
+          "name": "SingleTypeKVCacheManager",
+          "methods": [
+            "__init__",
+            "_get_num_evictable_blocks",
+            "get_num_blocks_to_allocate",
+            "add_local_computed_blocks",
+            "allocate_external_computed_blocks",
+            "allocate_new_blocks",
+            "take_new_block_ids",
+            "cache_blocks",
+            "reachable_block_mask",
+            "pop_blocks_for_free",
+            "free",
+            "get_num_common_prefix_blocks",
+            "find_longest_cache_hit",
+            "remove_skipped_blocks",
+            "get_num_skipped_tokens",
+            "new_step_starts"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 504
+        },
+        {
+          "name": "FullAttentionManager",
+          "methods": [
+            "find_longest_cache_hit",
+            "get_num_common_prefix_blocks"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 59
+        },
+        {
+          "name": "SlidingWindowManager",
+          "methods": [
+            "__init__",
+            "_contiguous_blocks_for_hit",
+            "find_longest_cache_hit",
+            "reachable_block_mask",
+            "get_num_skipped_tokens",
+            "get_num_common_prefix_blocks"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 205
+        },
+        {
+          "name": "ChunkedLocalAttentionManager",
+          "methods": [
+            "__init__",
+            "find_longest_cache_hit",
+            "get_num_skipped_tokens",
+            "get_num_common_prefix_blocks"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 148
+        },
+        {
+          "name": "MambaManager",
+          "methods": [
+            "__init__",
+            "find_longest_cache_hit",
+            "remove_skipped_blocks",
+            "get_num_common_prefix_blocks",
+            "get_num_blocks_to_allocate",
+            "allocate_new_blocks",
+            "pop_blocks_for_free",
+            "get_num_skipped_tokens",
+            "cache_blocks",
+            "new_step_starts"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 276
+        },
+        {
+          "name": "CrossAttentionManager",
+          "methods": [
+            "add_local_computed_blocks",
+            "allocate_external_computed_blocks",
+            "cache_blocks",
+            "get_num_common_prefix_blocks",
+            "find_longest_cache_hit"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 61
+        },
+        {
+          "name": "SinkFullAttentionManager",
+          "methods": [
+            "__init__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 22
+        }
+      ],
+      "imports": [
+        {
+          "source": "itertools",
+          "specifiers": [
+            "itertools"
+          ]
+        },
+        {
+          "source": "abc",
+          "specifiers": [
+            "ABC",
+            "abstractmethod"
+          ]
+        },
+        {
+          "source": "collections",
+          "specifiers": [
+            "defaultdict"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "Sequence"
+          ]
+        },
+        {
+          "source": "vllm.utils.math_utils",
+          "specifiers": [
+            "cdiv"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.block_pool",
+          "specifiers": [
+            "BlockPool"
+          ]
+        },
+        {
+          "source": "vllm.v1.core.kv_cache_utils",
+          "specifiers": [
+            "BlockHashList",
+            "BlockHashWithGroupId",
+            "KVCacheBlock"
+          ]
+        },
+        {
+          "source": "vllm.v1.kv_cache_interface",
+          "specifiers": [
+            "ChunkedLocalAttentionSpec",
+            "CrossAttentionSpec",
+            "FullAttentionSpec",
+            "HiddenStateCacheSpec",
+            "KVCacheSpec",
+            "MambaSpec",
+            "MLAAttentionSpec",
+            "SinkFullAttentionSpec",
+            "SlidingWindowMLASpec",
+            "SlidingWindowSpec",
+            "TQFullAttentionSpec"
+          ]
+        },
+        {
+          "source": "vllm.v1.kv_cache_spec_registry",
+          "specifiers": [
+            "KVCacheSpecRegistry"
+          ]
+        },
+        {
+          "source": "vllm.v1.request",
+          "specifiers": [
+            "Request"
+          ]
+        }
+      ],
+      "exports": [
+        "SingleTypeKVCacheManager",
+        "FullAttentionManager",
+        "SlidingWindowManager",
+        "ChunkedLocalAttentionManager",
+        "MambaManager",
+        "CrossAttentionManager",
+        "SinkFullAttentionManager",
+        "get_manager_for_kv_cache_spec",
+        "register_all_kvcache_specs"
+      ],
+      "totalLines": 1418,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

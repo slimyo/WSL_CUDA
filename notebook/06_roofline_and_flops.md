@@ -58,6 +58,7 @@ Roofline 模型用一个二维图+定量公式，把这个问题变成精确计�
 > **面试坑：NVIDIA 官方宣传页常写 2× 的数字（FP16 1979 / FP8 3958 TFLOPS），那是 2:4 结构化稀疏（sparsity）算力，LLM 推理一般用不上。报数字时务必说明 dense 还是 sparse。**
 
 > **ridge point = P<sub>peak</sub> / B<sub>peak</sub>**
+
 > I > I<sub>0</sub> 时 kernel 是 compute-bound，I < I<sub>0</sub> 时是 memory-bound。
 
 ---
@@ -81,29 +82,87 @@ Llama-7B:
 
 ### 3.2 Decode 单步 FLOPs
 
-**decoder_layer = attention + FFN**
+#### 万能公式：GEMM 的 FLOPs = 2 × M × N × K
 
-Attention FLOPs:
+所有线性层、attention 打分都是矩阵乘。一个 `C[M][N] = A[M][K] @ B[K][N]` 的浮点运算量是：
+
 ```
-QKV projection: 3 × 2 × hidden_dim × hidden_dim                ≈ 100 MFLOPs
-Q × K^T:        2 × head_dim × seq_len                          ≈ 1 MFLOPs
-P × V:          2 × seq_len × head_dim                          ≈ 1 MFLOPs
-Output proj:    2 × hidden_dim × hidden_dim                     ≈ 33 MFLOPs
-
-每层 attention: ≈ 135 MFLOPs
+FLOPs = 2 × M × N × K
 ```
 
-FFN FLOPs (SwiGLU):
+**那个 "× 2" 是哪来的？** —— 输出矩阵有 `M × N` 个元素，每个元素是一条长度为 `K` 的点积：
+`K` 次乘法 + `(K-1)` 次加法 ≈ `2K` 次浮点运算（这就是一次 **MAC = multiply-accumulate** 算 2 FLOPs 的约定）。
+所以总量 = `(M × N) 个输出 × 2K` = `2 × M × N × K`。**凡是公式里看到的 2，几乎都是这个 MAC 的 2。**
+
+**Decode 的关键简化：新 token 只有 1 个。** decode 一步只生成 1 个 token，所以喂进每个权重矩阵的"行数" `M = 1`。
+于是一个线性层 `y = x · W`（`x` 是 `[1, in]`，`W` 是 `[in, out]`）的 FLOPs 就退化成：
+
 ```
-gate = x × W_gate:    2 × hidden_dim × intermediate_size        ≈ 90 MFLOPs
-up   = x × W_up:      2 × hidden_dim × intermediate_size        ≈ 90 MFLOPs
-v    = silu(gate) * up                                          ≈ 0 (elementwise)
-down = v × W_down:    2 × intermediate_size × hidden_dim        ≈ 90 MFLOPs
+FLOPs(单 token 过一个线性层) = 2 × 1 × in × out = 2 × in × out
+```
+
+下面每一行的 `2 × … × …` 都是这个式子的实例。`hidden_dim = 4096`、`head_dim = 128`、`num_heads = 32`、
+`intermediate_size = 11008`，假设当前上下文 `seq_len = 4096`。
+
+#### Attention FLOPs（逐项拆解）
+
+```
+QKV projection: 3 × (2 × hidden_dim × hidden_dim)              ≈ 100 MFLOPs
+Q × K^T:        num_heads × (2 × head_dim × seq_len)           ≈ 33.5 MFLOPs
+P × V:          num_heads × (2 × seq_len × head_dim)           ≈ 33.5 MFLOPs
+Output proj:    2 × hidden_dim × hidden_dim                    ≈ 33.5 MFLOPs
+
+每层 attention: ≈ 201 MFLOPs
+```
+
+- **QKV projection = `3 × (2 × hidden_dim × hidden_dim)`**
+  - **那个 `3`**：要分别算 **Q、K、V 三个独立的投影**，各自一个 `[hidden_dim, hidden_dim]` 权重矩阵 → 系数 3。
+  - 每个投影：`x[1, 4096] · W[4096, 4096]` → 套万能公式 `2 × in × out = 2 × 4096 × 4096`。
+  - 这里 K、V 也输出 `hidden_dim = 4096`，是因为 **Llama-7B 是 MHA（`num_kv_heads = num_heads = 32`）**；若是 GQA/MLA，K、V 的 `out` 维更小，这三项不再相等（见 [11](11_attention_variants.md)）。
+  - 数值：`3 × 2 × 4096 × 4096 = 100,663,296 ≈ 100 M`。
+- **Q × K^T = `num_heads × (2 × head_dim × seq_len)`** —— ⚠️ 原文这里只写了**单个 head** 的 `2 × head_dim × seq_len ≈ 1 M`，**漏乘了 `num_heads`**。
+  - 单个 head：当前 query 只有 1 个 token，`Q_h[1, head_dim] · K_h^T[head_dim, seq_len]` → `2 × head_dim × seq_len = 2 × 128 × 4096 ≈ 1.05 M`。
+  - 32 个 head 求和：`32 × 1.05 M ≈ 33.5 M`。因为 `num_heads × head_dim = hidden_dim`，可等价写成 `2 × hidden_dim × seq_len`。
+  - **直觉**：decode 时这一步是「1 个新 query 对全部 `seq_len` 个历史 key 打分」，所以正比于 `seq_len`——上下文越长，这一项越大。
+- **P × V = `num_heads × (2 × seq_len × head_dim)` ≈ 33.5 M**
+  - `P` 是 softmax 后的注意力权重 `[1, seq_len]`，乘 `V_h[seq_len, head_dim]` → 每 head `2 × seq_len × head_dim`，再 `× num_heads`。与上一项对称，同样 ≈ 33.5 M。
+- **Output proj = `2 × hidden_dim × hidden_dim` ≈ 33.5 M**
+  - 多 head 拼回的 `[1, 4096]` 再过一个 `W_o[4096, 4096]`，没有系数 3（只有 1 个矩阵）。
+
+> **为什么 attention 打分（Q×K^T、P×V）相对小**：它们正比于 `seq_len`（4096），而投影正比于 `hidden_dim²`（4096²）。
+> `seq_len << hidden_dim²/head_dim`，所以 decode 单步里**权重投影才是 FLOPs 主体**——这也预告了 decode 是"被权重搬运卡住"的（见 3.3）。
+
+#### FFN FLOPs（SwiGLU，逐项拆解）
+
+```
+gate = x · W_gate:    2 × hidden_dim × intermediate_size        ≈ 90 MFLOPs
+up   = x · W_up:      2 × hidden_dim × intermediate_size        ≈ 90 MFLOPs
+act  = silu(gate) * up                                          ≈ 0 (elementwise)
+down = act · W_down:  2 × intermediate_size × hidden_dim        ≈ 90 MFLOPs
 
 每层 FFN: ≈ 270 MFLOPs
 ```
 
-**Llama-7B decode 每步 ≈ 32 × (135M + 270M) ≈ 13 GFLOPs**
+- **为什么是 3 个矩阵而不是 2 个**：普通 FFN 是 `up → 激活 → down` 两个权重；**SwiGLU 多了一个 gate 分支**
+  （`down(silu(gate(x)) ⊙ up(x))`），所以是 `gate / up / down` 三个 `[4096, 11008]` 量级的矩阵 → FFN 这里的"隐含的 3"。
+- 每个矩阵都套万能公式：`gate`、`up` 是 `2 × hidden_dim × intermediate = 2 × 4096 × 11008 ≈ 90.2 M`；
+  `down` 把 `intermediate` 投回 `hidden_dim`，`2 × 11008 × 4096`，同样 ≈ 90.2 M。
+- `silu(gate) ⊙ up` 是逐元素运算（`11008` 个元素级的乘和激活），相对 GEMM 可忽略，记作 ≈ 0。
+
+#### 汇总
+
+```
+每层 ≈ attention(201 M) + FFN(270 M) ≈ 471 MFLOPs
+32 层 ≈ 32 × 471 M ≈ 15 GFLOPs
+```
+
+**Llama-7B decode 每步 ≈ 13–15 GFLOPs。**
+
+> **和经验法则对一下表**：业界常用"自回归每生成 1 个 token ≈ `2 × N` FLOPs"（`N` = 参数量，那个 `2` 同样是 MAC）。
+> Llama-7B：`2 × 7e9 ≈ 14 GFLOPs`，和上面逐项加出来的 ~15 G 一致，可互相验算。
+> 原文按"每 head 1 M"算打分项得 135 M/层、≈13 G/步，是少乘了 `num_heads` 的**轻微低估**；
+> 严格值约 201 M/层、≈15 G/步。两者同数量级，**不影响后面 memory-bound 的结论**。
+> 下文 3.3–3.5 为了和经典讲法一致，仍用圆整的 ~13 GFLOPs 这个数（差异仅在取整 + 是否计入随 `seq_len` 增长的打分项）。
 
 ### 3.3 Decode 单步 HBM 访存
 

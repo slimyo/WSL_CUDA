@@ -2,7 +2,14 @@
 
 > 仓库：[sgl-project/sglang](https://github.com/sgl-project/sglang)，默认分支 `main`，
 > Python 代码在 `python/sglang/srt/`（srt = SGLang Runtime，serving 引擎本体）。
+> 本地：`third_party/sglang/`（submodule，浅克隆），pin commit `3fb65eb`（2026-06-17 核对路径全部存在）。
 > fetch 时间：2026-06-16。
+>
+> 本地速查（在仓库根 `third_party/sglang/` 下执行）：
+> ```bash
+> ls python/sglang/srt/mem_cache/ python/sglang/srt/managers/ python/sglang/srt/speculative/
+> grep -n "def match_prefix\|def insert\|def evict" python/sglang/srt/mem_cache/radix_cache.py
+> ```
 
 为什么排第二而不是第一：vLLM 是更通用的对照基准，但 **RadixAttention（基数树前缀复用）
 和当前的 P/D 分离/投机解码生态在 SGLang 里实现得更"显式"**，适合拿来和 vLLM 的对应模块
@@ -57,3 +64,20 @@
 
 - SGLang 的 `srt/managers/scheduler_components/` 是新拆出来的子模块，内容会比较快变化，先看 `scheduler.py` 主体再钻进去。
 - 与 vLLM 对比着读收益最大；建议每读完一个模块就去 [01_vllm/README.md](../01_vllm/README.md) 找对应小节互相补充。
+
+**2026-06-17 本地核对补充（pin `3fb65eb`）：**
+
+- **`srt/mem_cache/` 的 radix 家族已经"按场景裂变"**，上表的 `radix_cache.py`/`hiradix_cache.py`/`swa_radix_cache.py`/`mamba_radix_cache.py` 仍在，
+  另外新增一批值得注意：
+  - `radix_cache_cpp.py` + `cpp_radix_tree/`：基数树**C++ 重写版**（性能关键路径下沉到 C++），是"Python 原型 → C++ 加速"的典型演进；
+  - `deepseek_v4_memory_pool.py` / `deepseek_v4_compress_state.py`：**专为 DeepSeek-V 系（MLA 压缩 KV）定制的内存池**，
+    印证 [11](../../11_attention_variants.md) §3"MLA 的 KV 物理布局和标准 MHA 不同，需要专门的存储/取数路径"；
+  - `hi_mamba_radix_cache.py` / `hisparse_memory_pool.py` / `sparsity/`：分层 + 稀疏 attention 的 KV 管理，呼应 [18](../../18_frontier_2025_2026.md) §2.2 NSA/MoBA；
+  - `unified_radix_cache.py` / `unified_cache_components/`：把上面这些异构 cache 统一到一套接口（对照 vLLM 的 `kv_cache_coordinator.py` 思路）。
+- **`srt/disaggregation/` 的 P/D 分离后端比上表更多**：除 `mooncake/`/`nixl/` 外，还有 `mori/`、`ascend/`（昇腾）、
+  以及 `encode_server.py`/`encode_receiver.py`（把 **encode 阶段也拆成独立角色**，不止 prefill/decode 两段）、
+  `decode_kvcache_offload_manager.py`（decode 侧 KV 下放）。说明"分离式架构"正从 P/D 两段扩展到多段。
+- **`srt/speculative/` 投机解码变体很全**：`eagle_info.py`/`eagle_worker_v2.py`（EAGLE v2）、`multi_layer_eagle_*`（多层 EAGLE）、
+  `frozen_kv_mtp_*`（MTP，对应 [18](../../18_frontier_2025_2026.md) §2.4"MTP 即原生投机解码"）、`dflash_*`、
+  `adaptive_spec_params.py`/`adaptive_runtime_state.py`（**运行时自适应调投机参数**）、`eagle_disaggregation.py`（投机解码 + P/D 分离结合）。
+  和 vLLM 的 `spec_decode/` 对照能讲清"两家都在往多 proposer + 自适应方向走"。

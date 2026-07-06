@@ -1,0 +1,1854 @@
+{
+  "version": "1.0.0",
+  "kind": "codebase",
+  "project": {
+    "name": "vllm.v1.core",
+    "languages": [
+      "python"
+    ],
+    "frameworks": [
+      "vLLM"
+    ],
+    "description": "vLLM V1 引擎核心：调度器(continuous batching)与 KV cache 管理子系统(块池/协调器/前缀缓存/多注意力类型管理器)。",
+    "analyzedAt": "2026-06-17T13:13:18.209Z",
+    "gitCommitHash": "3d20275bb4d434f53055c3c0b645fd8bb072965e"
+  },
+  "nodes": [
+    {
+      "id": "file:__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "__init__.py",
+      "summary": "vllm.v1.core 包初始化文件(空)。",
+      "tags": [
+        "package-init",
+        "barrel"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "file:block_pool.py",
+      "type": "file",
+      "name": "block_pool.py",
+      "filePath": "block_pool.py",
+      "summary": "KV 物理块池：管理全部 KVCacheBlock 的分配/释放/驱逐与前缀缓存哈希表(BlockHashToBlockMap)，是 vLLM V1 前缀缓存命中的底层存储。",
+      "tags": [
+        "kv-cache",
+        "block-pool",
+        "prefix-cache",
+        "allocation",
+        "eviction"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:block_pool.py:BlockHashToBlockMap",
+      "type": "class",
+      "name": "BlockHashToBlockMap",
+      "filePath": "block_pool.py",
+      "summary": "块哈希 → 已缓存块 的映射表：前缀缓存命中查找的核心索引。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "block-pool"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        34,
+        127
+      ]
+    },
+    {
+      "id": "class:block_pool.py:BlockPool",
+      "type": "class",
+      "name": "BlockPool",
+      "filePath": "block_pool.py",
+      "summary": "KV 物理块池：统一分配/释放/驱逐块、维护前缀缓存哈希、生成块事件。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "block-pool"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        130,
+        527
+      ]
+    },
+    {
+      "id": "file:encoder_cache_manager.py",
+      "type": "file",
+      "name": "encoder_cache_manager.py",
+      "filePath": "encoder_cache_manager.py",
+      "summary": "多模态编码器输出缓存管理：跟踪图像/音频等 encoder 输出的复用与预算(compute_mm_encoder_budget)，避免对相同多模态输入重复编码。",
+      "tags": [
+        "multimodal",
+        "encoder-cache",
+        "budget",
+        "reuse"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:encoder_cache_manager.py:EncoderCacheManager",
+      "type": "class",
+      "name": "EncoderCacheManager",
+      "filePath": "encoder_cache_manager.py",
+      "summary": "多模态 encoder 输出缓存管理器：跟踪缓存项、判断可否分配、回收已用完的编码输出。",
+      "tags": [
+        "class",
+        "multimodal",
+        "encoder-cache"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        17,
+        266
+      ]
+    },
+    {
+      "id": "class:encoder_cache_manager.py:EncoderDecoderCacheManager",
+      "type": "class",
+      "name": "EncoderDecoderCacheManager",
+      "filePath": "encoder_cache_manager.py",
+      "summary": "encoder-decoder 模型的 encoder 缓存管理变体。",
+      "tags": [
+        "class",
+        "multimodal",
+        "encoder-cache"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        323,
+        381
+      ]
+    },
+    {
+      "id": "function:encoder_cache_manager.py:compute_mm_encoder_budget",
+      "type": "function",
+      "name": "compute_mm_encoder_budget",
+      "filePath": "encoder_cache_manager.py",
+      "summary": "计算多模态 encoder 缓存预算。",
+      "tags": [
+        "function",
+        "multimodal",
+        "encoder-cache"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        269,
+        316
+      ]
+    },
+    {
+      "id": "file:kv_cache_coordinator.py",
+      "type": "file",
+      "name": "kv_cache_coordinator.py",
+      "filePath": "kv_cache_coordinator.py",
+      "summary": "KV cache 协调器：在多个 KV cache 组(group)之上统一调度分配/缓存/释放，并按是否启用前缀缓存、是否混合架构分派到 Unitary/Hybrid/NoPrefixCache 等具体实现。",
+      "tags": [
+        "kv-cache",
+        "coordinator",
+        "hybrid",
+        "prefix-cache",
+        "dispatch"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:kv_cache_coordinator.py:KVCacheCoordinator",
+      "type": "class",
+      "name": "KVCacheCoordinator",
+      "filePath": "kv_cache_coordinator.py",
+      "summary": "KV cache 协调器基类：跨多组统一 allocate/cache/free 并实现最长前缀命中。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "coordinator"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        60,
+        365
+      ]
+    },
+    {
+      "id": "class:kv_cache_coordinator.py:KVCacheCoordinatorNoPrefixCache",
+      "type": "class",
+      "name": "KVCacheCoordinatorNoPrefixCache",
+      "filePath": "kv_cache_coordinator.py",
+      "summary": "关闭前缀缓存时的协调器实现(命中恒为空)。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "coordinator"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        368,
+        415
+      ]
+    },
+    {
+      "id": "class:kv_cache_coordinator.py:UnitaryKVCacheCoordinator",
+      "type": "class",
+      "name": "UnitaryKVCacheCoordinator",
+      "filePath": "kv_cache_coordinator.py",
+      "summary": "单组(同构)KV cache 协调器实现。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "coordinator"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        418,
+        487
+      ]
+    },
+    {
+      "id": "class:kv_cache_coordinator.py:SpecGroup",
+      "type": "class",
+      "name": "SpecGroup",
+      "filePath": "kv_cache_coordinator.py",
+      "summary": "投机解码相关的 KV cache 组描述。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "coordinator"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        490,
+        502
+      ]
+    },
+    {
+      "id": "class:kv_cache_coordinator.py:HybridKVCacheCoordinator",
+      "type": "class",
+      "name": "HybridKVCacheCoordinator",
+      "filePath": "kv_cache_coordinator.py",
+      "summary": "混合架构(多种注意力共存)的 KV 协调器：分组校验、跨组最长前缀命中。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "coordinator"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        505,
+        770
+      ]
+    },
+    {
+      "id": "function:kv_cache_coordinator.py:get_kv_cache_coordinator",
+      "type": "function",
+      "name": "get_kv_cache_coordinator",
+      "filePath": "kv_cache_coordinator.py",
+      "summary": "工厂：按是否前缀缓存/是否混合架构选择具体协调器实现。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "coordinator"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        773,
+        825
+      ]
+    },
+    {
+      "id": "file:kv_cache_manager.py",
+      "type": "file",
+      "name": "kv_cache_manager.py",
+      "filePath": "kv_cache_manager.py",
+      "summary": "KV cache 管理器对外门面：把 coordinator 与 block_pool 封装成调度器使用的接口(计算已命中块、分配 slot、缓存块、释放、前缀缓存统计)。",
+      "tags": [
+        "kv-cache",
+        "manager",
+        "facade",
+        "prefix-cache",
+        "scheduler-api"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:kv_cache_manager.py:KVCacheBlocks",
+      "type": "class",
+      "name": "KVCacheBlocks",
+      "filePath": "kv_cache_manager.py",
+      "summary": "一次分配返回的多组块集合，支持加法合并与块 id 提取。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "manager"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        26,
+        107
+      ]
+    },
+    {
+      "id": "class:kv_cache_manager.py:KVCacheManager",
+      "type": "class",
+      "name": "KVCacheManager",
+      "filePath": "kv_cache_manager.py",
+      "summary": "KV cache 管理器门面：对调度器暴露计算已命中块/分配 slot/缓存/释放/统计接口。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "manager"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        110,
+        614
+      ]
+    },
+    {
+      "id": "file:kv_cache_metrics.py",
+      "type": "file",
+      "name": "kv_cache_metrics.py",
+      "filePath": "kv_cache_metrics.py",
+      "summary": "采样式 KV 块指标收集器：记录块的分配/访问/驱逐与复用间隔，产出可观测性事件，供调优前缀缓存命中率使用。",
+      "tags": [
+        "kv-cache",
+        "metrics",
+        "observability",
+        "sampling"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:kv_cache_metrics.py:BlockMetricsState",
+      "type": "class",
+      "name": "BlockMetricsState",
+      "filePath": "kv_cache_metrics.py",
+      "summary": "单块的指标状态：访问时间戳、生命周期与复用间隔统计。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "metrics"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        16,
+        43
+      ]
+    },
+    {
+      "id": "class:kv_cache_metrics.py:KVCacheMetricsCollector",
+      "type": "class",
+      "name": "KVCacheMetricsCollector",
+      "filePath": "kv_cache_metrics.py",
+      "summary": "采样式块指标收集器：在分配/访问/驱逐时记录指标并产出事件。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "metrics"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        46,
+        96
+      ]
+    },
+    {
+      "id": "file:kv_cache_utils.py",
+      "type": "file",
+      "name": "kv_cache_utils.py",
+      "filePath": "kv_cache_utils.py",
+      "summary": "KV cache 的地基模块：定义块对象(KVCacheBlock)、空闲块双向链表(FreeKVCacheBlockQueue)、块哈希(前缀缓存的 key)，以及一整套把模型层映射为 KV cache 组/规格、估算可用块数与最大并发的配置算法。",
+      "tags": [
+        "kv-cache",
+        "foundation",
+        "block-hash",
+        "prefix-cache",
+        "config"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:kv_cache_utils.py:KVCacheBlock",
+      "type": "class",
+      "name": "KVCacheBlock",
+      "filePath": "kv_cache_utils.py",
+      "summary": "单个 KV cache 块的元数据对象：块 id、引用计数、块哈希(前缀缓存 key)，是 block_pool 与空闲链表操作的最小单位。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        117,
+        162
+      ]
+    },
+    {
+      "id": "class:kv_cache_utils.py:FreeKVCacheBlockQueue",
+      "type": "class",
+      "name": "FreeKVCacheBlockQueue",
+      "filePath": "kv_cache_utils.py",
+      "summary": "空闲 KV 块的侵入式双向链表队列：O(1) 取/还块并维护 LRU 顺序，是前缀缓存驱逐策略的底层数据结构。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        165,
+        394
+      ]
+    },
+    {
+      "id": "class:kv_cache_utils.py:BlockHashListWithBlockSize",
+      "type": "class",
+      "name": "BlockHashListWithBlockSize",
+      "filePath": "kv_cache_utils.py",
+      "summary": "按 block_size 切分的块哈希惰性视图：把 token 序列哈希按块粒度暴露，支撑前缀匹配。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        2088,
+        2155
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:generate_block_hash_extra_keys",
+      "type": "function",
+      "name": "generate_block_hash_extra_keys",
+      "filePath": "kv_cache_utils.py",
+      "summary": "生成参与块哈希的额外 key(多模态、LoRA 等)，保证前缀缓存正确性。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        525,
+        560
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:hash_block_tokens",
+      "type": "function",
+      "name": "hash_block_tokens",
+      "filePath": "kv_cache_utils.py",
+      "summary": "计算一个块内 token 序列的哈希(前缀缓存的 key 生成)。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        563,
+        590
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:get_request_block_hasher",
+      "type": "function",
+      "name": "get_request_block_hasher",
+      "filePath": "kv_cache_utils.py",
+      "summary": "为请求构造块哈希器，含多模态/LoRA/prompt-embeds 额外 key。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        659,
+        710
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:estimate_max_model_len",
+      "type": "function",
+      "name": "estimate_max_model_len",
+      "filePath": "kv_cache_utils.py",
+      "summary": "基于可用显存估算可支持的最大序列长度。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        762,
+        813
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:check_enough_kv_cache_memory",
+      "type": "function",
+      "name": "check_enough_kv_cache_memory",
+      "filePath": "kv_cache_utils.py",
+      "summary": "校验显存是否足以容纳最小 KV cache 需求，否则报错。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        816,
+        841
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:get_kv_cache_config_from_groups",
+      "type": "function",
+      "name": "get_kv_cache_config_from_groups",
+      "filePath": "kv_cache_utils.py",
+      "summary": "由已分组的 KV cache 规格生成具体配置。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        1247,
+        1332
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:unify_hybrid_kv_cache_specs",
+      "type": "function",
+      "name": "unify_hybrid_kv_cache_specs",
+      "filePath": "kv_cache_utils.py",
+      "summary": "统一混合架构下异构层的 KV 规格，使其可共用块池。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        1335,
+        1428
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:get_kv_cache_groups",
+      "type": "function",
+      "name": "get_kv_cache_groups",
+      "filePath": "kv_cache_utils.py",
+      "summary": "将模型层按注意力类型/页大小分组为 KV cache 组。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        1629,
+        1695
+      ]
+    },
+    {
+      "id": "function:kv_cache_utils.py:get_kv_cache_configs",
+      "type": "function",
+      "name": "get_kv_cache_configs",
+      "filePath": "kv_cache_utils.py",
+      "summary": "顶层入口：从模型各层规格推导最终的 KV cache 配置(分组、块数、页大小)。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "foundation"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        1937,
+        2085
+      ]
+    },
+    {
+      "id": "file:sched/__init__.py",
+      "type": "file",
+      "name": "__init__.py",
+      "filePath": "sched/__init__.py",
+      "summary": "vllm.v1.core.sched 调度子包初始化文件(空)。",
+      "tags": [
+        "package-init",
+        "barrel"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "file:sched/async_scheduler.py",
+      "type": "file",
+      "name": "async_scheduler.py",
+      "filePath": "sched/async_scheduler.py",
+      "summary": "异步调度器：继承 Scheduler，重写调度后/产出更新钩子以支持异步(重叠)执行模式。",
+      "tags": [
+        "scheduler",
+        "async",
+        "overlap",
+        "subclass"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:sched/async_scheduler.py:AsyncScheduler",
+      "type": "class",
+      "name": "AsyncScheduler",
+      "filePath": "sched/async_scheduler.py",
+      "summary": "异步调度器：重叠执行模式下重写调度后处理钩子。",
+      "tags": [
+        "class",
+        "scheduler",
+        "async"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        12,
+        75
+      ]
+    },
+    {
+      "id": "file:sched/interface.py",
+      "type": "file",
+      "name": "interface.py",
+      "filePath": "sched/interface.py",
+      "summary": "调度器抽象接口 SchedulerInterface：定义 schedule/add_request/update_from_output 等调度器契约，供同步/异步实现共享。",
+      "tags": [
+        "scheduler",
+        "interface",
+        "abstract",
+        "contract"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:sched/interface.py:PauseState",
+      "type": "class",
+      "name": "PauseState",
+      "filePath": "sched/interface.py",
+      "summary": "调度暂停状态枚举/标志。",
+      "tags": [
+        "class",
+        "scheduler",
+        "interface"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        22,
+        33
+      ]
+    },
+    {
+      "id": "class:sched/interface.py:SchedulerInterface",
+      "type": "class",
+      "name": "SchedulerInterface",
+      "filePath": "sched/interface.py",
+      "summary": "调度器抽象接口契约。",
+      "tags": [
+        "class",
+        "scheduler",
+        "interface"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        36,
+        250
+      ]
+    },
+    {
+      "id": "file:sched/output.py",
+      "type": "file",
+      "name": "output.py",
+      "filePath": "sched/output.py",
+      "summary": "调度输出数据结构：NewRequestData/CachedRequestData/SchedulerOutput 等，描述一步调度产出、发往 worker 执行的批次内容。",
+      "tags": [
+        "scheduler",
+        "dataclass",
+        "output",
+        "batch"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:sched/output.py:NewRequestData",
+      "type": "class",
+      "name": "NewRequestData",
+      "filePath": "sched/output.py",
+      "summary": "新请求在调度输出中的数据表示。",
+      "tags": [
+        "class",
+        "scheduler",
+        "dataclass"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        31,
+        108
+      ]
+    },
+    {
+      "id": "class:sched/output.py:CachedRequestData",
+      "type": "class",
+      "name": "CachedRequestData",
+      "filePath": "sched/output.py",
+      "summary": "续跑(已缓存)请求在调度输出中的数据表示。",
+      "tags": [
+        "class",
+        "scheduler",
+        "dataclass"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        112,
+        177
+      ]
+    },
+    {
+      "id": "class:sched/output.py:SchedulerOutput",
+      "type": "class",
+      "name": "SchedulerOutput",
+      "filePath": "sched/output.py",
+      "summary": "一步调度的完整产出：本步要执行的请求与 KV/采样元数据。",
+      "tags": [
+        "class",
+        "scheduler",
+        "dataclass"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        181,
+        259
+      ]
+    },
+    {
+      "id": "class:sched/output.py:GrammarOutput",
+      "type": "class",
+      "name": "GrammarOutput",
+      "filePath": "sched/output.py",
+      "summary": "结构化输出(语法约束)相关产出。",
+      "tags": [
+        "class",
+        "scheduler",
+        "dataclass"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        263,
+        267
+      ]
+    },
+    {
+      "id": "file:sched/request_queue.py",
+      "type": "file",
+      "name": "request_queue.py",
+      "filePath": "sched/request_queue.py",
+      "summary": "请求等待队列：FCFS 与优先级(PriorityRequestQueue)两种调度策略的队列实现，决定哪些等待请求被纳入下一批。",
+      "tags": [
+        "scheduler",
+        "queue",
+        "fcfs",
+        "priority",
+        "policy"
+      ],
+      "complexity": "moderate",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:sched/request_queue.py:SchedulingPolicy",
+      "type": "class",
+      "name": "SchedulingPolicy",
+      "filePath": "sched/request_queue.py",
+      "summary": "调度策略枚举(FCFS/优先级)。",
+      "tags": [
+        "class",
+        "scheduler",
+        "queue"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        13,
+        17
+      ]
+    },
+    {
+      "id": "class:sched/request_queue.py:RequestQueue",
+      "type": "class",
+      "name": "RequestQueue",
+      "filePath": "sched/request_queue.py",
+      "summary": "请求等待队列抽象基类。",
+      "tags": [
+        "class",
+        "scheduler",
+        "queue"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        20,
+        72
+      ]
+    },
+    {
+      "id": "class:sched/request_queue.py:FCFSRequestQueue",
+      "type": "class",
+      "name": "FCFSRequestQueue",
+      "filePath": "sched/request_queue.py",
+      "summary": "先来先服务请求队列。",
+      "tags": [
+        "class",
+        "scheduler",
+        "queue"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        75,
+        128
+      ]
+    },
+    {
+      "id": "class:sched/request_queue.py:PriorityRequestQueue",
+      "type": "class",
+      "name": "PriorityRequestQueue",
+      "filePath": "sched/request_queue.py",
+      "summary": "基于优先级的请求队列(堆)。",
+      "tags": [
+        "class",
+        "scheduler",
+        "queue"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        131,
+        198
+      ]
+    },
+    {
+      "id": "function:sched/request_queue.py:create_request_queue",
+      "type": "function",
+      "name": "create_request_queue",
+      "filePath": "sched/request_queue.py",
+      "summary": "工厂：按调度策略创建 FCFS 或优先级请求队列。",
+      "tags": [
+        "function",
+        "scheduler",
+        "queue"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        201,
+        208
+      ]
+    },
+    {
+      "id": "file:sched/scheduler.py",
+      "type": "file",
+      "name": "scheduler.py",
+      "filePath": "sched/scheduler.py",
+      "summary": "vLLM V1 调度器核心：continuous batching 主循环 schedule()/update_from_output()，统筹 KV 分配、抢占、前缀缓存、投机解码、P/D 分离 KV 传输与多模态编码输入调度。",
+      "tags": [
+        "scheduler",
+        "continuous-batching",
+        "preemption",
+        "spec-decode",
+        "kv-transfer"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:sched/scheduler.py:Scheduler",
+      "type": "class",
+      "name": "Scheduler",
+      "filePath": "sched/scheduler.py",
+      "summary": "vLLM V1 调度器：continuous batching 主循环，统筹 KV/抢占/投机/前缀缓存/KV 传输。",
+      "tags": [
+        "class",
+        "scheduler",
+        "continuous-batching"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        68,
+        2618
+      ]
+    },
+    {
+      "id": "file:sched/utils.py",
+      "type": "file",
+      "name": "utils.py",
+      "filePath": "sched/utils.py",
+      "summary": "调度辅助函数：停止条件判断(check_stop)、重复模式检测、批量移除等小工具。",
+      "tags": [
+        "scheduler",
+        "utils",
+        "stop-condition",
+        "helpers"
+      ],
+      "complexity": "simple",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "function:sched/utils.py:check_stop",
+      "type": "function",
+      "name": "check_stop",
+      "filePath": "sched/utils.py",
+      "summary": "判断请求是否满足停止条件(EOS/长度/stop 串)。",
+      "tags": [
+        "function",
+        "scheduler",
+        "utils"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        94,
+        130
+      ]
+    },
+    {
+      "id": "file:single_type_kv_cache_manager.py",
+      "type": "file",
+      "name": "single_type_kv_cache_manager.py",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "单一注意力类型的 KV 管理器族：为 Full/SlidingWindow/ChunkedLocal/Mamba/CrossAttention/Sink 各种注意力变体实现各自的最长前缀命中与块回收逻辑，是混合架构 KV 管理的可插拔单元。",
+      "tags": [
+        "kv-cache",
+        "attention-variants",
+        "sliding-window",
+        "mamba",
+        "strategy"
+      ],
+      "complexity": "complex",
+      "languageNotes": "Python 模块。"
+    },
+    {
+      "id": "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+      "type": "class",
+      "name": "SingleTypeKVCacheManager",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "单一注意力类型 KV 管理器基类：定义分配/缓存/最长前缀命中/块回收的模板。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        32,
+        535
+      ]
+    },
+    {
+      "id": "class:single_type_kv_cache_manager.py:FullAttentionManager",
+      "type": "class",
+      "name": "FullAttentionManager",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "全注意力的单类型 KV 管理器：全前缀可命中。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        538,
+        596
+      ]
+    },
+    {
+      "id": "class:single_type_kv_cache_manager.py:SlidingWindowManager",
+      "type": "class",
+      "name": "SlidingWindowManager",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "滑动窗口注意力的 KV 管理器：只对窗口内连续块做前缀命中与回收。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        599,
+        803
+      ]
+    },
+    {
+      "id": "class:single_type_kv_cache_manager.py:ChunkedLocalAttentionManager",
+      "type": "class",
+      "name": "ChunkedLocalAttentionManager",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "分块局部注意力的 KV 管理器。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        806,
+        953
+      ]
+    },
+    {
+      "id": "class:single_type_kv_cache_manager.py:MambaManager",
+      "type": "class",
+      "name": "MambaManager",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "Mamba/线性注意力的状态管理器：状态非传统 KV，需专门的分配与命中逻辑。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "complex",
+      "lineRange": [
+        956,
+        1231
+      ]
+    },
+    {
+      "id": "class:single_type_kv_cache_manager.py:CrossAttentionManager",
+      "type": "class",
+      "name": "CrossAttentionManager",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "cross-attention 的 KV 管理器(encoder-decoder)。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        1234,
+        1294
+      ]
+    },
+    {
+      "id": "class:single_type_kv_cache_manager.py:SinkFullAttentionManager",
+      "type": "class",
+      "name": "SinkFullAttentionManager",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "带 attention sink 的全注意力 KV 管理器。",
+      "tags": [
+        "class",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "simple",
+      "lineRange": [
+        1297,
+        1318
+      ]
+    },
+    {
+      "id": "function:single_type_kv_cache_manager.py:get_manager_for_kv_cache_spec",
+      "type": "function",
+      "name": "get_manager_for_kv_cache_spec",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "工厂：按 KV cache 规格(注意力类型)返回对应的单类型管理器。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        1321,
+        1356
+      ]
+    },
+    {
+      "id": "function:single_type_kv_cache_manager.py:register_all_kvcache_specs",
+      "type": "function",
+      "name": "register_all_kvcache_specs",
+      "filePath": "single_type_kv_cache_manager.py",
+      "summary": "注册所有注意力类型 → 管理器的映射(策略注册表)。",
+      "tags": [
+        "function",
+        "kv-cache",
+        "attention-variants"
+      ],
+      "complexity": "moderate",
+      "lineRange": [
+        1359,
+        1417
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:block_pool.py",
+      "target": "class:block_pool.py:BlockHashToBlockMap",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:block_pool.py",
+      "target": "class:block_pool.py:BlockPool",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:encoder_cache_manager.py",
+      "target": "class:encoder_cache_manager.py:EncoderCacheManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:encoder_cache_manager.py",
+      "target": "class:encoder_cache_manager.py:EncoderDecoderCacheManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:encoder_cache_manager.py",
+      "target": "function:encoder_cache_manager.py:compute_mm_encoder_budget",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "class:kv_cache_coordinator.py:KVCacheCoordinator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "class:kv_cache_coordinator.py:KVCacheCoordinatorNoPrefixCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:kv_cache_coordinator.py:KVCacheCoordinatorNoPrefixCache",
+      "target": "class:kv_cache_coordinator.py:KVCacheCoordinator",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "class:kv_cache_coordinator.py:UnitaryKVCacheCoordinator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:kv_cache_coordinator.py:UnitaryKVCacheCoordinator",
+      "target": "class:kv_cache_coordinator.py:KVCacheCoordinator",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "class:kv_cache_coordinator.py:SpecGroup",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "class:kv_cache_coordinator.py:HybridKVCacheCoordinator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:kv_cache_coordinator.py:HybridKVCacheCoordinator",
+      "target": "class:kv_cache_coordinator.py:KVCacheCoordinator",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "function:kv_cache_coordinator.py:get_kv_cache_coordinator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_manager.py",
+      "target": "class:kv_cache_manager.py:KVCacheBlocks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_manager.py",
+      "target": "class:kv_cache_manager.py:KVCacheManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_metrics.py",
+      "target": "class:kv_cache_metrics.py:BlockMetricsState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_metrics.py",
+      "target": "class:kv_cache_metrics.py:KVCacheMetricsCollector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "class:kv_cache_utils.py:KVCacheBlock",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "class:kv_cache_utils.py:FreeKVCacheBlockQueue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "class:kv_cache_utils.py:BlockHashListWithBlockSize",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:generate_block_hash_extra_keys",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:hash_block_tokens",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:get_request_block_hasher",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:estimate_max_model_len",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:check_enough_kv_cache_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:get_kv_cache_config_from_groups",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:unify_hybrid_kv_cache_specs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:get_kv_cache_groups",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:kv_cache_utils.py",
+      "target": "function:kv_cache_utils.py:get_kv_cache_configs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/async_scheduler.py",
+      "target": "class:sched/async_scheduler.py:AsyncScheduler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:sched/async_scheduler.py:AsyncScheduler",
+      "target": "class:sched/scheduler.py:Scheduler",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:sched/interface.py",
+      "target": "class:sched/interface.py:PauseState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/interface.py",
+      "target": "class:sched/interface.py:SchedulerInterface",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/output.py",
+      "target": "class:sched/output.py:NewRequestData",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/output.py",
+      "target": "class:sched/output.py:CachedRequestData",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/output.py",
+      "target": "class:sched/output.py:SchedulerOutput",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/output.py",
+      "target": "class:sched/output.py:GrammarOutput",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/request_queue.py",
+      "target": "class:sched/request_queue.py:SchedulingPolicy",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/request_queue.py",
+      "target": "class:sched/request_queue.py:RequestQueue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/request_queue.py",
+      "target": "class:sched/request_queue.py:FCFSRequestQueue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:sched/request_queue.py:FCFSRequestQueue",
+      "target": "class:sched/request_queue.py:RequestQueue",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:sched/request_queue.py",
+      "target": "class:sched/request_queue.py:PriorityRequestQueue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:sched/request_queue.py:PriorityRequestQueue",
+      "target": "class:sched/request_queue.py:RequestQueue",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:sched/request_queue.py",
+      "target": "function:sched/request_queue.py:create_request_queue",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "class:sched/scheduler.py:Scheduler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:sched/utils.py",
+      "target": "function:sched/utils.py:check_stop",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "class:single_type_kv_cache_manager.py:FullAttentionManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:single_type_kv_cache_manager.py:FullAttentionManager",
+      "target": "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "class:single_type_kv_cache_manager.py:SlidingWindowManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:single_type_kv_cache_manager.py:SlidingWindowManager",
+      "target": "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "class:single_type_kv_cache_manager.py:ChunkedLocalAttentionManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:single_type_kv_cache_manager.py:ChunkedLocalAttentionManager",
+      "target": "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "class:single_type_kv_cache_manager.py:MambaManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:single_type_kv_cache_manager.py:MambaManager",
+      "target": "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "class:single_type_kv_cache_manager.py:CrossAttentionManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:single_type_kv_cache_manager.py:CrossAttentionManager",
+      "target": "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "class:single_type_kv_cache_manager.py:SinkFullAttentionManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "class:single_type_kv_cache_manager.py:SinkFullAttentionManager",
+      "target": "class:single_type_kv_cache_manager.py:FullAttentionManager",
+      "type": "inherits",
+      "direction": "forward",
+      "weight": 0.9
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "function:single_type_kv_cache_manager.py:get_manager_for_kv_cache_spec",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "function:single_type_kv_cache_manager.py:register_all_kvcache_specs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:block_pool.py",
+      "target": "file:kv_cache_metrics.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:block_pool.py",
+      "target": "file:kv_cache_utils.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "file:block_pool.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "file:kv_cache_metrics.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "file:kv_cache_utils.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:kv_cache_coordinator.py",
+      "target": "file:single_type_kv_cache_manager.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:kv_cache_manager.py",
+      "target": "file:kv_cache_coordinator.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:kv_cache_manager.py",
+      "target": "file:kv_cache_metrics.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:kv_cache_manager.py",
+      "target": "file:kv_cache_utils.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/async_scheduler.py",
+      "target": "file:sched/output.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/async_scheduler.py",
+      "target": "file:sched/scheduler.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:encoder_cache_manager.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:kv_cache_coordinator.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:kv_cache_manager.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:kv_cache_metrics.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:kv_cache_utils.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:sched/interface.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:sched/output.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:sched/request_queue.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sched/scheduler.py",
+      "target": "file:sched/utils.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "file:block_pool.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:single_type_kv_cache_manager.py",
+      "target": "file:kv_cache_utils.py",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:scheduling",
+      "name": "调度层 (Scheduling)",
+      "description": "continuous batching 主循环与请求生命周期：决定每步纳入哪些请求、产出执行批次、处理停止/抢占/异步重叠。",
+      "nodeIds": [
+        "file:sched/__init__.py",
+        "file:sched/async_scheduler.py",
+        "class:sched/async_scheduler.py:AsyncScheduler",
+        "file:sched/interface.py",
+        "class:sched/interface.py:PauseState",
+        "class:sched/interface.py:SchedulerInterface",
+        "file:sched/output.py",
+        "class:sched/output.py:NewRequestData",
+        "class:sched/output.py:CachedRequestData",
+        "class:sched/output.py:SchedulerOutput",
+        "class:sched/output.py:GrammarOutput",
+        "file:sched/request_queue.py",
+        "class:sched/request_queue.py:SchedulingPolicy",
+        "class:sched/request_queue.py:RequestQueue",
+        "class:sched/request_queue.py:FCFSRequestQueue",
+        "class:sched/request_queue.py:PriorityRequestQueue",
+        "function:sched/request_queue.py:create_request_queue",
+        "file:sched/scheduler.py",
+        "class:sched/scheduler.py:Scheduler",
+        "file:sched/utils.py",
+        "function:sched/utils.py:check_stop"
+      ]
+    },
+    {
+      "id": "layer:kv-cache-management",
+      "name": "KV 缓存管理层 (KV Cache Management)",
+      "description": "面向调度器的 KV cache 门面与协调：跨组分配/缓存/释放、前缀缓存命中、按注意力类型分派的单类型管理器。",
+      "nodeIds": [
+        "file:block_pool.py",
+        "class:block_pool.py:BlockHashToBlockMap",
+        "class:block_pool.py:BlockPool",
+        "file:kv_cache_coordinator.py",
+        "class:kv_cache_coordinator.py:KVCacheCoordinator",
+        "class:kv_cache_coordinator.py:KVCacheCoordinatorNoPrefixCache",
+        "class:kv_cache_coordinator.py:UnitaryKVCacheCoordinator",
+        "class:kv_cache_coordinator.py:SpecGroup",
+        "class:kv_cache_coordinator.py:HybridKVCacheCoordinator",
+        "function:kv_cache_coordinator.py:get_kv_cache_coordinator",
+        "file:kv_cache_manager.py",
+        "class:kv_cache_manager.py:KVCacheBlocks",
+        "class:kv_cache_manager.py:KVCacheManager",
+        "file:single_type_kv_cache_manager.py",
+        "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+        "class:single_type_kv_cache_manager.py:FullAttentionManager",
+        "class:single_type_kv_cache_manager.py:SlidingWindowManager",
+        "class:single_type_kv_cache_manager.py:ChunkedLocalAttentionManager",
+        "class:single_type_kv_cache_manager.py:MambaManager",
+        "class:single_type_kv_cache_manager.py:CrossAttentionManager",
+        "class:single_type_kv_cache_manager.py:SinkFullAttentionManager",
+        "function:single_type_kv_cache_manager.py:get_manager_for_kv_cache_spec",
+        "function:single_type_kv_cache_manager.py:register_all_kvcache_specs"
+      ]
+    },
+    {
+      "id": "layer:kv-cache-foundation",
+      "name": "KV 缓存基础 (Foundation)",
+      "description": "最底层的块对象、空闲块链表、块哈希与 KV cache 配置/显存估算算法，以及块级指标采集。",
+      "nodeIds": [
+        "file:__init__.py",
+        "file:kv_cache_metrics.py",
+        "class:kv_cache_metrics.py:BlockMetricsState",
+        "class:kv_cache_metrics.py:KVCacheMetricsCollector",
+        "file:kv_cache_utils.py",
+        "class:kv_cache_utils.py:KVCacheBlock",
+        "class:kv_cache_utils.py:FreeKVCacheBlockQueue",
+        "class:kv_cache_utils.py:BlockHashListWithBlockSize",
+        "function:kv_cache_utils.py:generate_block_hash_extra_keys",
+        "function:kv_cache_utils.py:hash_block_tokens",
+        "function:kv_cache_utils.py:get_request_block_hasher",
+        "function:kv_cache_utils.py:estimate_max_model_len",
+        "function:kv_cache_utils.py:check_enough_kv_cache_memory",
+        "function:kv_cache_utils.py:get_kv_cache_config_from_groups",
+        "function:kv_cache_utils.py:unify_hybrid_kv_cache_specs",
+        "function:kv_cache_utils.py:get_kv_cache_groups",
+        "function:kv_cache_utils.py:get_kv_cache_configs"
+      ]
+    },
+    {
+      "id": "layer:multimodal-cache",
+      "name": "多模态编码缓存 (Encoder Cache)",
+      "description": "缓存图像/音频等多模态 encoder 输出，避免对相同输入重复编码并管理其预算。",
+      "nodeIds": [
+        "file:encoder_cache_manager.py",
+        "class:encoder_cache_manager.py:EncoderCacheManager",
+        "class:encoder_cache_manager.py:EncoderDecoderCacheManager",
+        "function:encoder_cache_manager.py:compute_mm_encoder_budget"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "从地基读起：块、链表与哈希",
+      "description": "kv_cache_utils.py 定义 KVCacheBlock(块元数据)、FreeKVCacheBlockQueue(O(1) 空闲块 LRU 链表) 与 hash_block_tokens(前缀缓存 key)。这是理解 vLLM V1 前缀缓存的最小词汇表。",
+      "nodeIds": [
+        "file:kv_cache_utils.py",
+        "class:kv_cache_utils.py:KVCacheBlock",
+        "class:kv_cache_utils.py:FreeKVCacheBlockQueue",
+        "function:kv_cache_utils.py:hash_block_tokens"
+      ],
+      "languageLesson": "Python 中用侵入式双向链表(prev/next 指针挂在对象上)实现 O(1) LRU，比 collections.OrderedDict 更省开销——工业级缓存的常见手法。"
+    },
+    {
+      "order": 2,
+      "title": "物理块池：分配/驱逐与前缀缓存命中",
+      "description": "block_pool.py 的 BlockPool 在块对象之上管理分配、引用计数、驱逐，并用 BlockHashToBlockMap 做哈希→块的命中查找。",
+      "nodeIds": [
+        "file:block_pool.py",
+        "class:block_pool.py:BlockPool",
+        "class:block_pool.py:BlockHashToBlockMap"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "按注意力类型分裂的单类型管理器",
+      "description": "single_type_kv_cache_manager.py 用 SingleTypeKVCacheManager 基类 + Full/SlidingWindow/Mamba/CrossAttention 等子类，为不同注意力变体实现各自的最长前缀命中与块回收。这是混合架构 KV 管理的可插拔单元。",
+      "nodeIds": [
+        "file:single_type_kv_cache_manager.py",
+        "class:single_type_kv_cache_manager.py:SingleTypeKVCacheManager",
+        "class:single_type_kv_cache_manager.py:SlidingWindowManager",
+        "class:single_type_kv_cache_manager.py:MambaManager",
+        "function:single_type_kv_cache_manager.py:get_manager_for_kv_cache_spec"
+      ],
+      "languageLesson": "工厂函数 get_manager_for_kv_cache_spec + 注册表 register_all_kvcache_specs 是策略模式的 Python 写法：新增注意力类型只需注册，无需改调度器。"
+    },
+    {
+      "order": 4,
+      "title": "协调器：把多组 KV 统一起来",
+      "description": "kv_cache_coordinator.py 在多个 KV cache 组之上统一调度，并按是否前缀缓存/是否混合架构分派到 Unitary/Hybrid/NoPrefixCache。get_kv_cache_coordinator 是入口工厂。",
+      "nodeIds": [
+        "file:kv_cache_coordinator.py",
+        "class:kv_cache_coordinator.py:KVCacheCoordinator",
+        "class:kv_cache_coordinator.py:HybridKVCacheCoordinator",
+        "function:kv_cache_coordinator.py:get_kv_cache_coordinator"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "门面：调度器看到的 KV 接口",
+      "description": "kv_cache_manager.py 的 KVCacheManager 把 coordinator 与 block_pool 封装为调度器调用的接口(get_computed_blocks/allocate_slots/cache_blocks)。",
+      "nodeIds": [
+        "file:kv_cache_manager.py",
+        "class:kv_cache_manager.py:KVCacheManager",
+        "class:kv_cache_manager.py:KVCacheBlocks"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "调度器主循环：把一切串起来",
+      "description": "sched/scheduler.py 的 Scheduler.schedule()/update_from_output() 是 continuous batching 心脏：用 request_queue 选请求、向 KVCacheManager 要块、处理抢占/投机/KV 传输，产出 SchedulerOutput。AsyncScheduler 是其异步重叠变体。",
+      "nodeIds": [
+        "file:sched/scheduler.py",
+        "class:sched/scheduler.py:Scheduler",
+        "file:sched/output.py",
+        "class:sched/output.py:SchedulerOutput",
+        "file:sched/request_queue.py",
+        "function:sched/request_queue.py:create_request_queue",
+        "file:sched/async_scheduler.py"
+      ],
+      "languageLesson": "SchedulerInterface(抽象基类) + Scheduler/AsyncScheduler 的继承结构，让同步与异步执行共享同一份调度契约——阅读时先看 interface.py 的方法签名再看实现。"
+    }
+  ]
+}

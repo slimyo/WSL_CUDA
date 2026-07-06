@@ -1,9 +1,16 @@
 # FlashInfer 源码精读
 
 > 仓库：[flashinfer-ai/flashinfer](https://github.com/flashinfer-ai/flashinfer)，默认分支 `main`。
+> 本地：`third_party/flashinfer/`（submodule，浅克隆），pin commit `2ec0c9b`（2026-06-17 核对：§1 attention 表里的 cuh 文件**全部存在**）。
 > 两层结构：`include/flashinfer/`（C++/CUDA kernel 本体，header-only 风格）+
 > `flashinfer/`（Python 封装 + JIT 编译入口）。
 > fetch 时间：2026-06-16。
+>
+> 本地速查（在仓库根 `third_party/flashinfer/` 下执行）：
+> ```bash
+> ls include/flashinfer/attention/      # mla.cuh / decode_mla_cute_sm80.cuh / hopper/ / blackwell/ / sparse_mla_sm120/ 都在
+> sed -n '1,60p' include/flashinfer/attention/mla_params.cuh   # 看 MLA 的 latent + decoupled-RoPE 分开传参
+> ```
 
 为什么排第三：vLLM 和 SGLang 的 attention/MLA/MoE kernel **后端之一就是 FlashInfer**
 （见 [01_vllm](../01_vllm/README.md) 的 `vllm/v1/attention/selector.py`、
@@ -63,3 +70,12 @@
 
 - 这是三个项目里**唯一以 CUDA/C++ 为主**的仓库，适合配合你自己的 P2/P3/P4 项目代码风格对比读。
 - 头文件较多用 C++ template 重度泛型，第一遍读不需要逐个模板参数搞懂，先抓控制流和数据布局。
+
+**2026-06-17 本地核对补充（pin `2ec0c9b`）：**
+
+- §1 attention 表里点名的文件**逐个核实都在** `include/flashinfer/attention/`：`mla.cuh`、`mla_hopper.cuh`、`mla_params.cuh`、
+  `cutlass_mla.cuh`、`decode_mla_cute_sm80.cuh`、`hopper.cuh` + `hopper/`、`persistent.cuh` + `persistent_template.cuh`、
+  `blackwell/`、`sparse_mla_sm120/`、`prefill.cuh`、`decode.cuh`。同目录还有 `pod.cuh`/`batch_pod.cuh`（POD-attention，prefill+decode 融合一个 kernel）、
+  `cascade.cuh`（级联/共享前缀 attention，正好呼应 SGLang RadixAttention 的前缀复用在 kernel 侧的对应物）。
+- **`decode_mla_cute_sm80.cuh` 对你（SM75/Turing 学 CuTe）尤其值得读**：它是用 CuTe 写、SM80 即可编的 MLA decode，
+  比 Hopper 版少了 TMA/wgmma 这些 SM90 专属特性，更接近你能在本地理解/改的层次——是从 LeetCUDA 玩具 kernel 过渡到工业 CuTe 代码的好样本。
