@@ -1,3 +1,21 @@
 [submodule "third_party/LeetCUDA"]
 	path = third_party/LeetCUDA
 	url = https://github.com/xlite-dev/LeetCUDA.git
+[submodule "third_party/FlashMLA"]
+	path = third_party/FlashMLA
+	url = https://github.com/deepseek-ai/FlashMLA.git
+[submodule "third_party/DeepEP"]
+	path = third_party/DeepEP
+	url = https://github.com/deepseek-ai/DeepEP.git
+[submodule "third_party/DeepGEMM"]
+	path = third_party/DeepGEMM
+	url = https://github.com/deepseek-ai/DeepGEMM.git
+[submodule "third_party/vllm"]
+	path = third_party/vllm
+	url = https://github.com/vllm-project/vllm.git
+[submodule "third_party/sglang"]
+	path = third_party/sglang
+	url = https://github.com/sgl-project/sglang.git
+[submodule "third_party/flashinfer"]
+	path = third_party/flashinfer
+	url = https://github.com/flashinfer-ai/flashinfer.git
