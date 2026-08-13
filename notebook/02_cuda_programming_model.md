@@ -78,52 +78,75 @@ kernel_name<<<gridDim, blockDim, sharedMemBytes, stream>>>(args...);
 | `sharedMemBytes` | `int` | 动态 shared memory 大小 (字节) | 0 |
 | `stream` | `cudaStream_t` | 关联的 CUDA stream | 0 (默认流) |
 
-### 3.1 grid / block 可以是一维、二维、三维
 
+### 3.1 grid / block 可以是一维、二维、三维
+CUDA 采用 `dim3` 数据结构来定义网格和块的维度，未指定的维度默认为 1。
 ```cuda
 // 一维: 256 个 block, 每个 block 128 个 thread
 kernel<<<256, 128>>>();
-
 // 二维: 16×16 blocks, 每个 block 32×4 threads
-dim3 grid(16, 16);
-dim3 block(32, 4);
-kernel<<<grid, block>>>();
+dim3 grid2d(16, 16);
+dim3 block2d(32, 4);
+kernel<<<grid2d, block2d>>>();
+// 三维: 4×4×4 blocks, 每个 block 8×8×8 threads (常用于体数据处理)
+dim3 grid3d(4, 4, 4);
+dim3 block3d(8, 8, 8);
+kernel<<<grid3d, block3d>>>();
 ```
-
-**为什么要多维?** 处理图像/矩阵时, `(x, y)` 坐标映射更自然:
-
+**为什么要多维?**
+多维索引让数据坐标映射更自然，减少手动计算坐标的麻烦：
+*   **二维 (2D)**: 处理**图像/矩阵**时，`(x, y)` 坐标直接对应像素位置。
+*   **三维 (3D)**: 处理**体数据** 时，`(x, y, z)` 坐标直接对应空间体素。
+**三维处理示例:**
 ```cuda
-__global__ void process_image(float *image, int width, int height) {
+__global__ void process_volume(float *volume, int width, int height, int depth) {
+    // 1. 计算当前 thread 负责的 坐标
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x < width && y < height) {
-        image[y * width + x] = ...;
+    int z = blockIdx.z * blockDim.z + threadIdx.z;
+    // 2. 边界检查 (防止越界访问)
+    if (x < width && y < height && z < depth) {
+        // 3. 计算线性索引 (Row-Major 顺序: x最内层变化最快, z最外层)
+        // 公式: z * (面大小) + y * (行大小) + x
+        long idx = z * width * height + y * width + x;
+        volume[idx] = ...;
     }
 }
 ```
-
 ### 3.2 内置变量: 在哪里知道"我是谁"
-
-**面试必须背熟的 6 个变量:**
-
+**面试必须背熟的 4 类变量 (每类包含 x/y/z 三个分量):**
 | 变量 | 类型 | 含义 |
 |------|------|------|
 | `threadIdx.x/y/z` | `uint3` | 当前 thread 在 block 内的索引 (从 0 开始) |
 | `blockIdx.x/y/z` | `uint3` | 当前 block 在 grid 内的索引 (从 0 开始) |
 | `blockDim.x/y/z` | `dim3` | 当前 block 的维度 (即 `<<<grid,block>>>` 的 block 参数) |
 | `gridDim.x/y/z` | `dim3` | 当前 grid 的维度 (即 `<<<grid,block>>>` 的 grid 参数) |
-
-**全局 thread id 公式:**
-
+**全局 thread id 公式 (核心考点):**
+计算全局 ID 本质上是将多维索引**扁平化** 为一维线性地址。
 ```cuda
-// 一维
+// 1. 一维网格 (1D)
 int global_id = threadIdx.x + blockIdx.x * blockDim.x;
-
-// 二维
+// 2. 二维网格 (2D) - 计算 和分离坐标
 int x = threadIdx.x + blockIdx.x * blockDim.x;
 int y = threadIdx.y + blockIdx.y * blockDim.y;
-int global_id_2d = y * gridDim.x * blockDim.x + x;
+// 转为一维线性 ID (假设 x 为最内层维度)
+int global_id_2d = y * gridDim.x * blockDim.x + x; 
+// 注: gridDim.x * blockDim.x 等于 Grid 的总宽度
+// 3. 三维网格 (3D) - 计算分离坐标
+int x = threadIdx.x + blockIdx.x * blockDim.x;
+int y = threadIdx.y + blockIdx.y * blockDim.y;
+int z = threadIdx.z + blockIdx.z * blockDim.z;
+// 转为一维线性 ID (假设 x 最内层, z 最外层)
+long global_id_3d = z * (gridDim.x * blockDim.x) * (gridDim.y * blockDim.y) 
+                 + y * (gridDim.x * blockDim.x) 
+                 + x;
 ```
+> **记忆技巧**: 
+> 计算 ID 时，**越外层的维度，乘以的跨度越大**。
+> *   `x` 只需乘以 1 (隐式)。
+> *   `y` 需要跨过一整行 (`x 的总长度`)。
+> *   `z` 需要跨过一整面 (`x 的总长度` * `y 的总长度`)。
+
 
 ---
 

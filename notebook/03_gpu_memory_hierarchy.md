@@ -177,7 +177,141 @@ cudaMemcpyToSymbol(coeffs, h_coeffs, sizeof(h_coeffs));
 
 **何时用**: 所有 thread 读相同地址的数据 (broadcast → 1 cycle)。例如: 卷积核系数、查找表。
 
-### 2.5 Texture Memory — 2D 空间局部性
+
+
+### 2.5 向量化访存：float4 与 128 位加载
+
+> 关键优化面试题：如何通过向量化数据类型（float4 / half2 / int4）提高显存带宽利用率、减少指令数和线程数。
+
+#### A. 提高显存带宽利用率 (Memory Coalescing 与 128 位对齐)
+
+```
+GPU 的 global memory 访问以 memory transaction 为单位（32 字节或 128 字节）。
+一个 warp (32 threads) 的请求能否被合并成少量 transaction，取决于地址对齐和访问模式。
+
+不使用 float4：
+  每个线程读 1 个 float (4 字节)
+  warp 32 线程 = 32 * 4 = 128 字节 (对齐在 128B 边界上) -> 可以合并为 1 次 128B transaction
+  但地址必须是 128B 对齐的：若线程 0 读 addr0，线程 1 读 addr1，线程 2 读 addr2 ...
+  此时 addr = base + tid * 4，stride=4 字节 -> 地址连续 -> 合并 OK
+
+使用 float4：
+  每个线程读 4 个 float (16 字节)
+  warp 32 线程 = 32 * 16 = 512 字节 = 4 次 128B transaction
+  每个线程的地址天然 16 字节对齐（因为 sizeof(float4) = 16）
+  一个 warp 的 4 次 128B transaction 被完美拆分，无跨 segment 访问
+
+  // float4 版本
+  float4 val = ((float4*)arr)[idx];  // 1 条 LDG.128 指令
+  // 等价于但更高效
+  float v0 = arr[idx*4+0];           // 1 条 LDG
+  float v1 = arr[idx*4+1];           // 1 条 LDG
+  float v2 = arr[idx*4+2];           // 1 条 LDG
+  float v3 = arr[idx*4+3];           // 1 条 LDG
+
+关键：仅仅"地址连续"不够——还需要"地址对齐到 128B 边界"。
+  若 base address % 128 != 0，即使连续访问也会跨 cache line 边界，
+  一次 128B transaction 变成 2 次 128B transaction (带宽利用率减半)。
+  使用 float4 强制 16B 对齐，有利于编译器生成对齐的 LDG.128 指令。
+```
+
+#### B. 减少指令数量
+
+```
+不使用 float4: 编译器可能生成 4 条 LDG (32-bit load) 指令
+  或幸运时 fuse 成 1 条 LDS.128/SMEM load——但 global memory 上无保证。
+
+使用 float4: 编译器保证生成 1 条 LDG.128 (128-bit vector load) 指令
+  PTX 层面:
+    ld.global.v4.f32  {%r0, %r1, %r2, %r3}, [%rd1];   // 1 条向量化加载
+  SASS 层面:
+    LDG.E.128  R0, [R6];                               // 1 条 128-bit load
+
+指令数减少的收益：
+  - 指令 cache (I-Cache) 压力减小（更少的指令占据 I-Cache）
+  - 取指/解码带宽节省（解码单元可更专注于其他指令）
+  - warp scheduler 的 issue slot 更宽松（1 条 vs 4 条指令占 1 个 cycle vs 4 cycles）
+
+  同理适用于 store:
+    float4 val = make_float4(a, b, c, d);
+    ((float4*)output)[idx] = val;   // 1 条 STG.128
+
+    vs:
+    output[idx*4+0] = a;            // 1 条 STG
+    output[idx*4+1] = b;            // 1 条 STG
+    output[idx*4+2] = c;            // 1 条 STG
+    output[idx*4+3] = d;            // 1 条 STG
+```
+
+#### C. 减少启动的线程数量
+
+```
+处理 N 个 float 元素：
+
+  naive 方案: N 个线程，每个处理 1 个元素
+  float4 方案: N/4 个线程，每个处理 4 个元素
+
+  收益：
+    - 线程块调度开销减少（~1/4 的 block 数）
+    - __syncthreads() 同步开销减少（同步次数不变但参与的 warp 更少）
+    - 寄存器压力降低（虽然每个线程多用 4 个寄存器，但总线程数减少 > 4 倍？并不）
+      注意: 每个线程的寄存器占用会升高（因为需要 4 个值），能否省寄存器看具体实现。
+
+实际使用的典型模式：
+
+  // --- 标准写法 ---
+  __global__ void add_kernel(const float *a, const float *b, float *c, int N) {
+      int idx = threadIdx.x + blockIdx.x * blockDim.x;
+      if (idx < N) c[idx] = a[idx] + b[idx];
+  }
+
+  // --- float4 优化版 ---
+  __global__ void add_kernel_float4(const float *a, const float *b, float *c, int N) {
+      int idx = (threadIdx.x + blockIdx.x * blockDim.x) * 4;      // ×4
+      if (idx + 3 < N) {  // 同时检查 4 个元素
+          float4 va = ((float4*)a)[idx/4];
+          float4 vb = ((float4*)b)[idx/4];
+          float4 vc;
+          vc.x = va.x + vb.x;
+          vc.y = va.y + vb.y;
+          vc.z = va.z + vb.z;
+          vc.w = va.w + vb.w;
+          ((float4*)c)[idx/4] = vc;
+      }
+      // 处理尾部不足 4 个的元素
+      for (int i = idx + (idx + 3 < N ? 4 : 0); i < N; i++)
+          c[i] = a[i] + b[i];
+  }
+```
+
+#### D. float4 的适用场景与局限
+
+```
+适用场景：
+  - Elementwise ops: add, mul, silu, relu, gelu 等（读入→计算→写回）
+  - Memory-bound 算子（占绝大多数 fuse-able elementwise 场景）
+  - 数据连续排列（AOS 不行，SOA 可以）
+
+不适用场景：
+  - Reduce / softmax / layernorm（需要跨元素归约，float4 打包后归约反而更复杂）
+  - 随机访存（索引不连续，float4 加载无用数据浪费带宽）
+  - 数据类型不是 4 字节的倍数（如 char/short 无法直接用 float4）
+  - GPU 架构较老（Maxwell/Kepler 之前 LDG.128 支持不好）
+
+其他向量化数据类型：
+  float4  (16B): 4 个 float, 最常用
+  float2  (8B):  2 个 float, 宽度不够但比 scalar 好
+  half2   (4B):  2 个 half, fp16 场景常用（LeetCUDA gelu/elu/relu 大量使用）
+  int4    (16B): 4 个 int, INT8/INT32 计算用
+  double2 (16B): 2 个 double, double precision 场景
+```
+
+> **面试题：什么叫 vectorized memory access？为什么 float4 比 4 次 float load 更快？**
+> 标准回答：减少指令数（LDG.128 代替 4x LDG）、保证 128-bit 对齐提高 coalescing 效率、
+> 减少取指/解码成本、减少线程数/block 调度开销。注意尾部不足 4 个元素的处理，
+> 以及不适用于 reduce/softmax 等归约操作。
+
+### 2.6 Texture Memory — 2D 空间局部性
 
 | 属性 | 值 |
 |------|------|
@@ -188,7 +322,7 @@ cudaMemcpyToSymbol(coeffs, h_coeffs, sizeof(h_coeffs));
 
 在现代 CUDA 中, Texture Memory 用得越来越少 (因为 L1/L2 cache 越来越智能), 面试了解概念即可。
 
-### 2.6 Local Memory — 寄存器的"备胎"
+### 2.7 Local Memory — 寄存器的"备胎"
 
 编译器把放不进寄存器的变量"溢出"到 local memory, 物理上在 Global Memory (由 L1 缓存):
 
@@ -303,3 +437,7 @@ for (int i = 0; i < 1000; i++) {
 - [ ] 知道 constant memory 的 broadcast 机制
 - [ ] 理解 data tiling: global → shared → register 的模式
 - [ ] 能回答上面 6 个面试问题
+- [ ] 能用 float4 优化 elementwise kernel，说清指令数减少和带宽提升原理
+- [ ] 能区分 float4 适用场景（elementwise/连续访存）和不适用场景（reduce/随机访存）
+- [ ] 知道 half2 / int4 / double2 等向量化数据类型
+- [ ] 能写出 float4 优化版的 vector_add kernel，包含尾部处理

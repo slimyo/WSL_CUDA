@@ -1,203 +1,171 @@
-# Tensor Cores 精度体系与 WMMA 入门
 
-> TODO.md: 阶段3 — AI 推理核心
-> 前置: `reduce_warp_learning.md`, `bank_conflict_learning.md`
-> 参考: `third_party/LeetCUDA/kernels/hgemm/`
-
-## 1. 精度体系总览
-
-| 格式 | bits | exp | mantissa | range | 用途 |
+# Tensor Cores 精度体系与 WMMA 入门：深度解析版
+> **Learning Path**: 阶段 3 — AI 推理核心
+> **Prerequisites**: `reduce_warp_learning.md`, `bank_conflict_learning.md`
+> **Code Ref**: `third_party/LeetCUDA/kernels/hgemm/`
+---
+## 1. 精度体系：从 FP32 到 FP4 的取舍
+**核心权衡**：Range（动态范围）vs Precision（精度）。
+训练主要怕 overflow（溢出），推理主要怕 underflow/precision loss（精度丢失）。
+| 格式 | Bits | Exp | Mantissa | Range (Approx) | 关键特性与陷阱 |
 |------|:---:|:---:|:---:|------|------|
-| FP32 | 32 | 8 | 23 | ~3.4e38 | 训练基准 |
-| TF32 | 19 | 8 | 10 | 同 FP32 | A100 Tensor Core 内部格式 |
-| BF16 | 16 | 8 | 7 | 同 FP32 | 训练 (range=FP32) |
-| FP16 | 16 | 5 | 10 | ~65504 | 推理 (注意 range 仅 65504) |
-| FP8 E4M3 | 8 | 4 | 3 | ~448 | H100 推理 |
-| FP8 E5M2 | 8 | 5 | 2 | ~57344 | H100 训练 |
-
-**关键**: BF16 和 FP32 range 相同 (都 8-bit exponent), 所以 BF16 训练不会 overflow。
-FP16 range 只有 65504, Adam 优化器等场景容易 overflow 需要 loss scaling。
-
-## 2. Tensor Cores 原理
-
-```
-D = A × B + C   (矩阵乘加 fused)
-```
-
-一个 Tensor Core 一个 cycle 完成 tile 乘加 (如 m16n8k16), 比 CUDA Core 快 8-16×。
-
-各代 GPU Tensor Core 能力:
-- SM70 (V100): FP16
-- SM75 (Turing): + INT8, INT4
-- SM80 (A100): + TF32, BF16, FP64
-- SM90 (H100): + FP8
-
-## 3. WMMA API (高层)
-
-```cuda
+| **FP32** | 32 | 8 | 23 | ~3.4e38 | 黄金标准，但也浪费带宽。 |
+| **TF32** | 19 | 8 | 10 | 同 FP32 | **A100 特有**。保持 FP32 Range，精度降至 FP16 水平。软件层面无缝替代 FP32。 |
+| **BF16** | 16 | 8 | 7 | 同 FP32 | **LLM 训练首选**。Exp 与 FP32 相同，无需 Loss Scaling。缺点是尾数位太少，累加时需注意精度。 |
+| **FP16** | 16 | 5 | 10 | ~65504 | **推理主流**。陷阱：Range 极窄（65504）。Attention Score 或 Adam 计算中极易溢出，必须配合 Loss Scaling。 |
+| **FP8 E4M3** | 8 | 4 | 3 | ~448 | **H100 推理**。精度更高，Range 极小，常用于 Activations。 |
+| **FP8 E5M2** | 8 | 5 | 2 | ~57344 | **H100 训练**。Range 大，精度差，常用于 Gradients。 |
+### 实战细节：累加器精度
+在 Kernel 编写中，FP16 的累加通常在 Tensor Core 内部以 **FP32** 精度执行，最后写回时再转回 FP16，以防止精度崩塌。
+---
+## 2. Tensor Core 原理：硬件视角
+**公式**：$D = A \times B + C$
+**本质**：Tensor Core 是一个 **SIMT 之上的矩阵乘加单元**。
+### 计算吞吐 vs. 数据搬运
+- **算力**：Tensor Core 比 CUDA Core 快 8-16x。例如 A100 FP16 算力 312 TFLOPS。
+- **瓶颈**：通常是 **Memory Bandwidth** 和 **Register/Shared Memory Pressure**。
+- **关键指标**：Arithmetic Intensity（计算密度）。只要数据能喂饱 Tensor Core，性能就能起飞。
+---
+## 3. WMMA API：初学者的把手
+WMMA (Warp Matrix Multiply Accumulate) 是 NVIDIA 提供的高层 C++ API。它隐藏了底层的寄存器映射细节。
+```cpp
 #include <mma.h>
-using namespace nvcuda;
-
-// fragment = 寄存器中存的小矩阵片
-wmma::fragment<wmma::matrix_a, 16,16,16, half, wmma::row_major> a_frag;
-wmma::fragment<wmma::matrix_b, 16,16,16, half, wmma::row_major> b_frag;
-wmma::fragment<wmma::accumulator, 16,16,16, half> c_frag;
-
-// 加载 shared/global memory → fragment
-wmma::load_matrix_sync(a_frag, A_ptr, lda);
-wmma::load_matrix_sync(b_frag, B_ptr, ldb);
-
-// 矩阵乘 (在 fragment 上)
+using namespace nvcuda::wmma;
+// 1. 定义 Fragment (寄存器分配)
+// 一个 fragment 占用整个 Warp 的寄存器资源
+wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
+wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::col_major> b_frag;
+wmma::fragment<wmma::accumulator, 16, 16, 16, float> c_frag; // 累加器建议用 float
+// 2. 加载
+wmma::load_matrix_sync(a_frag, (const half*)sram_ptr_a, 16); 
+wmma::load_matrix_sync(b_frag, (const half*)sram_ptr_b, 16);
+// 3. 计算
+wmma::fill_fragment(c_frag, 0.0f);
 wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
-
-// 存回 memory
-wmma::store_matrix_sync(C_ptr, c_frag, ldc, wmma::mem_row_major);
+// 4. 存储
+wmma::store_matrix_sync((float*)dst_ptr, c_frag, 16, wmma::mem_row_major);
 ```
-
-Tile 大小: M×N×K 可选 16×16×16 或 32×8×16 或 8×32×16。
-
-## 4. WMMA → MMA PTX 升级
-
-WMMA 是封装好的 API, MMA PTX 是底层 inline assembly, 更灵活:
-
-```cuda
-// MMA PTX: m16n8k16, row-major A, col-major B, FP16 input/output
+---
+## 3.5 深度对比：Warp Reduce (SIMT) vs. WMMA (Tensor Core)
+以常见的 **Softmax**（使用 Warp Reduce）和 **HGEMM**（使用 WMMA）为例，这两者代表了 GPU 计算的两种完全不同的哲学。理解它们的区别是优化 Flash Attention 等复杂 Kernel 的基石。
+### 1. 硬件执行单元与指令集
+| 特性 | Warp Reduce (Softmax) | WMMA (HGEMM) |
+|------|------|------|
+| **执行单元** | **CUDA Cores** (FP32/FP64 Unit) | **Tensor Cores** (矩阵乘法专用单元) |
+| **指令粒度** | **Scalar/Vector**：一条指令处理 1 个数据 (如 `FADD`, `FMUL`) | **Matrix**：一条指令处理一个矩阵块 (如 `HMMA.m16n8k16`) |
+| **计算密度** | 低 (1 Op / cycle / thread) | 极高 (如 $16 \times 8 \times 16 = 2048$ 次乘加 / cycle) |
+**关键洞察**：
+- **Softmax** 包含 `exp`, `div` 等非线性操作，Tensor Core 无法处理，必须用 CUDA Core。
+- **HGEMM** 全是乘加运算，是 Tensor Core 的主场。
+### 2. 线程角色与数据视角
+这是新手最容易困惑的地方：**"我的数据在哪个线程里？"**
+#### Warp Reduce (Softmax) 模式
+- **线程角色**：**独立战士**。每个线程拥有独立的数据所有权。
+- **数据视角**：
+  - Thread $i$ 负责 $x_i$。
+  - 计算 Max/Sum 时，线程之间通过 Shuffle (`__shfl_xor_sync`) 交换数据，完成 Warp 级别的归约。
+- **代码特征**：
+  ```cuda
+  // 每个 thread 独立执行，逻辑清晰
+  float val = input[tid];
+  // 跨 warp 交换数据做归约
+  for (int offset = 16; offset > 0; offset /= 2) {
+      val = max(val, __shfl_down_sync(0xffffffff, val, offset));
+  }
+  ```
+#### WMMA (Tensor Core) 模式
+- **线程角色**：**协作齿轮**。单个线程**没有**完整的矩阵数据，它只持有一个"碎片" (Fragment)。
+- **数据视角**：
+  - 一个 Warp (32 threads) 共同"拥有"一个 $16 \times 16$ 的矩阵块。
+  - Thread $i$ 持有矩阵 A 和 B 的若干散乱元素。这些元素在寄存器中的布局是**不透明**的，由 Hardware-defined Layout 决定。
+- **代码特征**：
+  ```cuda
+  // 看起来像变量，实际是寄存器集合
+  // 整个 Warp 必须同步加载，单个 thread 无法独立操作 a_frag
+  wmma::fragment<wmma::matrix_a, ...> a_frag;
+  wmma::load_matrix_sync(a_frag, smem_ptr, 16); 
+  wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);
+  ```
+### 3. 性能瓶颈分析
+| 瓶颈类型 | Warp Reduce (Softmax) | WMMA (HGEMM) |
+|------|------|------|
+| **Memory Bandwidth** | **主要瓶颈**。Softmax 是典型的 Bandwidth-bound。每个数据做几次运算就写回，利用率低。 | **次要瓶颈**（如果流水线做得好）。Tensor Core 计算太快，往往需要 Double Buffering 来喂饱它。 |
+| **Instruction Latency** | 敏感。循环内的 `max` 或 `sum` 操作有依赖链，难以指令级并行 (ILP)。 | 不敏感。一条 `mma_sync` 指令内部高度并行。 |
+| **Register Pressure** | 低。只需要少量寄存器保存当前元素。 | **极高**。一个 Fragment 可能占用几十个寄存器，Occupancy 容易因寄存器不足而下降。 |
+### 4. 为什么 Softmax 不用 Tensor Core？
+1.  **算子不匹配**：Tensor Core 本质是 $D = A \times B + C$。Softmax 包含 `Exp` 和 `Reduce`。
+    -   `Reduce` 是沿着行/列压缩维度，不是矩阵乘法。
+    -   `Exp` 是逐元素非线性运算，Tensor Core 无法处理。
+2.  **数据流差异**：Softmax 需要两遍扫描，且中间结果交互复杂，不适合 Tensor Core 的"大块数据吞吐"模式。
+### 5. 实战启示：Flash Attention 的融合
+Flash Attention 是理解这两种模式结合的经典案例：
+```
+Flash Attention Kernel 分解:
+1. Q x K^T (Matmul) -> 使用 WMMA / Tensor Core (核心算力瓶颈)
+2. Softmax (Reduce + Exp) -> 使用 CUDA Core / Warp Shuffle (内存瓶颈，数据局部性关键)
+3. P x V (Matmul) -> 使用 WMMA / Tensor Core
+```
+**优化逻辑**：
+- 如果纯用 WMMA，中间结果 $S = QK^T$ 会写回 HBM，Softmax 再读回来，带宽爆炸。
+- Flash Attention 将 Softmax 这一步的 **Warp Reduce 逻辑** 嵌入到 WMMA Kernel 的 **Epilogue** 阶段。
+- **数据流**：Tensor Core 算完 $QK^T$ -> 结果留在 Shared Memory -> 直接用 CUDA Core 跑 Softmax -> 结果喂给下一轮 Tensor Core。
+---
+## 4. WMMA → MMA PTX：性能进阶之路
+WMMA 简单，但黑盒限制了极致性能。MMA PTX (Inline Assembly) 允许精细控制寄存器布局。
+### MMA PTX 优势
+1.  **布局控制**：WMMA 隐藏了寄存器布局，导致难以优化 Epilogue。MMA PTX 让你知道数据在哪个寄存器。
+2.  **指令融合**：可以将 MMA 结果直接用于后续指令，减少寄存器读写。
+3.  **更小的 Tile**：WMMA 最小 16x16x16，MMA PTX 支持 `m16n8k16`，减少了寄存器压力。
+### 代码示例：m16n8k16
+```cpp
+// A: 16x16, B: 16x8, C: 16x8
 asm volatile(
     "mma.sync.aligned.m16n8k16.row.col.f16.f16.f16.f16 "
-    "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%10,%11,%12,%13};"
-    : "=r"(d0),"=r"(d1),"=r"(d2),"=r"(d3)
-    : "r"(a0),"r"(a1),"r"(a2),"r"(a3),
-      "r"(b0),"r"(b1),
-      "r"(c0),"r"(c1),"r"(c2),"r"(c3));
+    "{%0, %1, %2, %3}, "  // D: 4 regs
+    "{%4, %5, %6, %7}, "  // A: 4 regs
+    "{%8, %9}, "          // B: 2 regs
+    "{%10, %11, %12, %13};" // C: 4 regs
+    : "=r"(d[0]), "=r"(d[1]), "=r"(d[2]), "=r"(d[3])
+    : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]),
+      "r"(b[0]), "r"(b[1]),
+      "r"(c[0]), "r"(c[1]), "r"(c[2]), "r"(c[3])
+);
 ```
-
-MMA PTX 优势: 可控精确布局, interleaved 指令, 自定义 tile, 更好的 register 控制。
-
-## 5. 学习路线
-
-1. 理解 FP16/BF16/TF32 精度差异
-2. WMMA 写一个简单 HGEMM (参考 `kernels/hgemm/`)
-3. 升级到 MMA PTX
-4. 对比 cuBLAS 性能
-
-## 6. 推荐阅读
-
-1. `kernels/hgemm/` WMMA 版本 — 最先读
-2. `kernels/hgemm/` MMA 版本 — 理解 PTX inline asm
-3. NVIDIA Tensor Core 白皮书
-
+### 进阶难点：ldmatrix 指令
+MMA PTX 最难的地方在于**数据喂给 Tensor Core 前，必须重排到特定的寄存器布局**。
+`ldmatrix` 指令是 SM75+ 的神器，它能直接把 Shared Memory 数据加载成 MMA 需要的寄存器布局，避免了繁琐的手动 Shuffle。
 ---
-
-## 6b. Hopper wgmma — Warpgroup-Level MMA (SM90)
-
-**WMMA 的问题：**
-```
-wmma::mma_sync 在 warp 内部做 matmul。
-Hopper 引入 wgmma = warpgroup（4 warp = 128 threads）级 MMA。
-优势：
-  - 更大的 tile（如 64×16×16）：单次 matmul 吞吐更高
-  - 异步执行：warpgroup 发射后继续执行其他指令
-  - 与 TMA 异步加载结合 → pipeline overlap
-```
-
-```cuda
-// wgmma PTX 伪代码 (Hopper):
-// 一个 warpgroup 共 4 warp
-// wgmma.fence 确保 SMEM 可见
-// wgmma.commit_group 提交异步 matmul
-// wgmma.wait_group 等待完成
+## 5. Hopper SM90：wgmma 与异步计算
+**痛点**：SM80 中，Warp 发射 MMA 指令后，必须等待 Tensor Core 返回结果，导致 Warp Stall。
+**wgmma (Warpgroup MMA)**：
+- **Warp Group**：4个 Warp (128 threads) 协同工作。
+- **异步执行**：Warp 发射 `wgmma` 指令后，**立即释放**，可以去计算下一个 Tile。计算和存储访问完全流水线化。
+```cpp
+// Hopper 伪代码流程
+// 1. TMA 异步加载 Global -> Shared
+// 2. wgmma 异步计算
 asm volatile(
-    "wgmma.fence.sync.aligned;\n"
-    "{\n"
-    "    .reg .b64 tma_desc;\n"
-    "    // TMA 描述符: 从 global→SMEM 加载 K 和 V 分块\n"
-    "    // wgmma 自动从 SMEM 读取数据\n"
-    "    wgmma.mma_async.sync.aligned.m64n16k16.f16.f16\n"
-    "    {%0,%1,%2,%3,%4,%5,%6,%7},\n"
-    "    %8, %9, %10, 1, 1, 0, 0;\n"
-    "}"
-    : "=r"(o0),"=r"(o1), ...
-    : "r"(desc));
+    "wgmma.mma_async.sync.aligned.m64n8k16.f16.f16.f16 "
+    "{%0, ...}, %1, %2, %3, 1, 1, 0, 0;"
+    : ...
+    : "r"(addr_a), "r"(addr_b), "r"(addr_c));
 ```
-
-**LeetCUDA 参考:** `kernels/hgemm/wgmma/` — Hopper wgmma HGEMM 实现
-
-## 7. Blackwell tcgen05 / Tensor Memory (SM100)
-
-### 7.1 为什么 Blackwell 要引入 Tensor Memory
-
-```
-Hopper 的限制：
-  - wgmma 数据仍从 SMEM 读 → 占用了 SMEM 带宽
-  - SMEM 在 Hopper 是共享资源（同时服务加载和计算）
-  
-Blackwell 的 Tensor Memory (TMEM):
-  - 专用 SRAM（仅 Tensor Core 可访问）
-  - 不占 SMEM 带宽
-  - 更大容量、更高吞吐
-```
-
-### 7.2 tcgen05 指令
-
-```
-tcgen05 = Tensor Core Generation 05（Blackwell 的第五代 Tensor Core 指令集）
-
-关键特性：
-  - accumulator 放在 Tensor Memory 而不是寄存器
-    （操作数 A/B 仍可从 SMEM 或 TMEM 读）→ 释放寄存器给其他工作
-  - 更大的 tile 粒度（如 128×256）、单条指令由专门硬件调度（不占用 warp 发射槽）
-  - 完全异步：发射后 warp 继续干别的，靠 mbarrier 同步
-  - 原生 FP4/FP6 支持 (NVFP4)
-
-对比：
-  - wgmma  (Hopper):   操作数 SMEM/RF，accumulator 占用大量寄存器
-  - tcgen05 (Blackwell): accumulator 进 TMEM，寄存器压力骤降，
-    epilogue 由 CUDA core 从 TMEM 读出处理
-```
-
-### 7.3 tcgen05 使用模式
-
-```cuda
-// tcgen05 伪代码 (概念层面):
-// 1. TMA descriptor 配置: global → Tensor Memory
-// 2. tcgen05_async_mma: 在 Tensor Memory 上做异步 matmul
-// 3. tcgen05_wait: 等待完成
-// 4. 结果直接被后续 Tensor Core 指令消费
-
-// 核心优势：TMEM 到 Tensor Core 的路径是 SMEM 到 Register 的 ~2× 带宽
-// 且 TMEM 访问不竞争 SMEM 端口 → 可以同时做 SMEM 相关操作
-```
-
-**Blackwell FA4 选择 tcgen05 + CuTe 的原因：**
-- CuTe 的 layout 抽象让 TMEM 上的数据布局管理更简洁
-- tcgen05 的异步 MMA 需要复杂的 pipeline 管理，CuTe 的 TiledMMA 可以表达
-
-## 8. Tensor Core 各代对比总结
-
-| 架构 | 代 | 新增格式 | API | Tile 粒度 | 关键特性 |
-|------|:---:|------|------|:---:|------|
-| Volta | SM70 | FP16 | WMMA | 16×16×16 | 第一代 |
-| Turing | SM75 | INT8/INT4 | WMMA | 16×16×16 | 整数量化 |
-| Ampere | SM80 | TF32/BF16/FP64 | WMMA+MMA PTX | 16×8×16 | cp.async |
-| Hopper | SM90 | FP8 | MMA PTX+wgmma | 64×16×16 | TMA, Warp Specialization |
-| Blackwell | SM100 | NVFP4 | tcgen05 | 64×64 | Tensor Memory, FP4 |
-
-## 9. LeetCUDA Tensor Core 源码索引
-
-| LeetCUDA 目录 | Tensor Core 类型 |
-|------|------|
-| `hgemm/wmma/` | WMMA (SM70+) — 最基础 |
-| `hgemm/mma/` | MMA PTX (SM80+) — 精确控制 |
-| `hgemm/wgmma/` | wgmma (SM90 Hopper) |
-| `ws-hgemm/` | Warp Specialization wgmma |
-| `sgemm/sgemm_wmma_tf32_stage.cu` | WMMA TF32 + Multi-Stage |
-| `flash-attn/mma/` | MMA-based FlashAttention |
-| `cutlass/cute_dsl/` | CuTe DSL 实现 |
-
-## 10. 学习检查清单（补充）
-
-- [ ] 理解 wgmma 和 WMMA 的区别（warp vs warpgroup）
-- [ ] 理解 Tensor Memory 和 Shared Memory 的区别
-- [ ] 能讲清 Hopper TMA + wgmma 的 pipeline 架构
-- [ ] 能讲清 Blackwell tcgen05 为什么比 wgmma 更高效
-- [ ] 能在 LeetCUDA 中找到对应 Tensor Core 版本的源码
+---
+## 6. Blackwell SM100：Tensor Memory (TMEM)
+**SM90 的瓶颈**：wgmma 累加器占用大量寄存器（RF），限制了 Occupancy。
+**SM100 的解法：Tensor Memory (TMEM)**
+- **定义**：一种全新的、仅 Tensor Core 可访问的 SRAM。
+- **位置**：位于 SM 内部，但在 Register File 之外。
+- **优势**：累加器直接放在 TMEM，不再占用宝贵的 RF，寄存器压力骤降。
+---
+## 7. 总结与检查清单
+| 特性 | Warp Reduce | WMMA | MMA PTX | wgmma |
+|------|------|------|------|------|
+| **典型算子** | Softmax, LayerNorm | HGEMM (入门) | HGEMM (极致优化) | FlashAttn v2/v3 |
+| **线程角色** | 独立战士 | 协作齿轮 | 协作齿轮 | 协作齿轮组 |
+| **瓶颈** | 带宽 | 计算密度 | 寄存器压力 | 流水线延迟 |
+**检查清单：**
+- [ ] **精度理解**：为什么 BF16 训练不需要 Loss Scaling？
+- [ ] **线程视角**：WMMA 中，Thread $i$ 能独立读取 Fragment 中的第 $j$ 个元素吗？（答案：不能，布局不透明）
+- [ ] **混合编程**：能讲清 Flash Attention 是如何在一个 Kernel 里调度 Tensor Core (Matmul) 和 CUDA Core (Softmax) 的吗？
+- [ ] **架构理解**：Hopper 的 wgmma 为何能解决 Warp Stall 问题？(异步执行 + Producer/Consumer 模式)

@@ -1,15 +1,10 @@
 # 04 Warp 执行模型: SIMT, 分支发散, 调度与 Occupancy
-
 > 对象: CUDA / GPU 零基础
 > 前置: 01_gpu_hardware_architecture.md, 02_cuda_programming_model.md
 > 目标: 面试能讲清楚 warp 如何执行、分支发散如何发生、occupancy 如何计算
-
 ---
-
 ## 1. Warp 是什么
-
 **Warp 是 GPU 硬件调度的最小单位。** 一个 warp = 32 个线程, 这 32 个线程**永远同时**执行同一条指令, 只是操作的数据不同。
-
 ```
 Thread Block: 256 threads = 8 warps
   warp 0: thread 0-31
@@ -18,87 +13,64 @@ Thread Block: 256 threads = 8 warps
   ...
   warp 7: thread 224-255
 ```
-
 **Warp 内线程是连续编号的:** `warp_id = threadIdx.x / 32`, `lane_id = threadIdx.x % 32`。
-
 ---
-
 ## 2. SIMT — 单指令多线程
-
 **SIMT (Single Instruction, Multiple Threads)** 是 NVIDIA 对 SIMD 的扩展:
-
 | | SIMD (CPU, e.g. AVX) | SIMT (GPU, CUDA) |
 |------|------|------|
 | 宽度 | 固定 (256/512 bit) | 逻辑上 32 threads |
 | 编程模型 | 显式向量寄存器 (__m256) | 标量编程 (像写单线程代码) |
 | 分支 | 需要手动 mask | 硬件自动处理 (warp divergence) |
 | 内存访问 | 需要显式 gather/scatter | 每个 thread 独立地址 |
-
 **SIMT 的好处: 写 GPU 代码时你不需要想"向量", 只需要写标量 thread 代码。**
-
 ```cuda
 // GPU 代码看起来像普通C代码:
 __global__ void add(float *a, float *b, float *c, int N) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx < N) c[idx] = a[idx] + b[idx];
 }
-
 // 但硬件执行时: warp 中 32 个线程同时执行这一条 FADD 指令
 // lane 0: a[0] + b[0], lane 1: a[1] + b[1], ... lane 31: a[31] + b[31]
 ```
-
 ---
-
 ## 3. Warp 调度: 零开销切换
-
 ### 3.1 调度流程
-
 ```
 SM Partition 内部:
-
 Warp Scheduler (每 SM Partition 1 个)
   ├── 查看所有驻留 warps 中哪些可以发射下一条指令
   ├── 选择 1 个 warp
   ├── Dispatch Unit 把指令发到执行单元
   └── 每个时钟周期重复
-
 就绪 warp 的条件:
   - 上一条指令的操作数已就绪 (寄存器/共享内存数据依赖解除)
   - 执行单元可用 (没有其他 warp 占用 FP32 Core 等)
   - 不在等待访存结果
 ```
-
 ### 3.2 零开销切换的秘密
-
 ```cuda
 // warp 0 执行:
 float val = global_data[idx];  // global memory 访存, ~300 cycles
 // warp 0 此时 stall — 等待数据从 HBM 返回
-
 // 硬件从不等待:
 // → Warp Scheduler 立刻切换到 warp 1
 // → warp 1 执行它的指令
 // → warp 1 stall → 切到 warp 2
 // → ...
 // → 300 cycles 后, warp 0 的数据到了, warp 0 重新就绪
-
 // 关键: 上下文切换不需要保存/恢复任何东西
 // 每个 warp 的寄存器是独立的、物理隔离的
 // 交换只是改变 Warp Scheduler 指向哪个 warp 的寄存器堆
 ```
-
 **对比 CPU 线程切换:**
 ```
 CPU: 保存 32+ 个寄存器 → 换页表 → TLB flush → 恢复 32+ 寄存器 → ~1μs
 GPU: Warp Scheduler 换个指针 → 0 cycle
 ```
-
 ---
-
 ## 4. Warp Divergence (分支发散) — 面试必考
-
 ### 4.1 问题
-
 ```cuda
 __global__ void divergent_kernel(float *data, int N) {
     int tid = threadIdx.x;
@@ -109,208 +81,150 @@ __global__ void divergent_kernel(float *data, int N) {
     }
 }
 ```
-
 **发生什么?** 一个 warp 内, lane 0,2,4,... 走 if 分支, lane 1,3,5,... 走 else 分支。
-
-**GPU 不能同时执行两个分支 → 串行化:**
-
+**GPU 不能同时执行两个分支 → 串行化 (Pascal及以前) / 交错执行 (Volta+):**
 ```
 时间 →
   ├─ if 路径: lane 0,2,4,...,30 活跃 (lane 1,3,5,...,31 被禁用)
   ├─ else 路径: lane 1,3,5,...,31 活跃 (lane 0,2,4,...,30 被禁用)
   └─ 汇合点
-
-总执行时间: if_path_time + else_path_time  (2× 的代价)
+总执行时间: if_path_time + else_path_time  (Pascal: 2× 的代价)
 ```
-
 ### 4.2 哪些情况会发散?
-
 ```cuda
 // 1. 条件基于 threadIdx (warp 内)
 if (lane_id < 16) {...} else {...}   // 发散! lane 0-15 vs 16-31
-
 // 2. 循环次数不同
 for (int i = 0; i < lane_id; i++) {...}  // 发散! 每 lane 迭代次数不同
-
 // 3. 条件基于数据值
 if (data[tid] > 0) {...}  // 可能发散 (取决于数据)
-
 // 以下不会发散 (只要条件在 warp 内一致):
 if (blockIdx.x == 0) {...}  // 不! blockIdx 在 warp 内一致
 if (warp_id > 2) {...}      // 不! warp 内所有 lane 的 warp_id 相同
 ```
-
 ### 4.3 SIMD 风格的"if 转计算"优化
-
 ```cuda
 // 发散版本:
 if (lane_id < 16)
     val = a * b;
 else
     val = a + b;
-
 // 无发散版本 (避免分支):
 float coeff = (lane_id < 16) ? 1.0f : 0.0f;
 val = coeff * (a * b) + (1.0f - coeff) * (a + b);
 ```
-
 **但也不是绝对需要避免分支:** 如果分支很短 (几条指令), 发散的开销可能小于乘加指令链。实际情况用 profiler。
-
 ### 4.4 Volta+ 的 Independent Thread Scheduling
-
 从 Volta (SM70) 开始, GPU 支持 warp 内独立线程调度:
-
 ```
 Pascal 及以前:
   所有线程在同一 PC (Program Counter) → lockstep
-
 Volta+:
   每个线程可以有独立的 PC → warp 内可以交错执行
   但 SIMT 模型不变: 同一时刻仍执行同一条指令的线程必须有相同 PC
 ```
-
 这意味着一部分线程可以在 A 分支, 一部分在 B 分支, 但硬件可以交错执行而不是先 A 后 B。不过对程序员来说, 仍是"不要依赖 warp 内同步"。
-
 ---
-
 ## 5. Occupancy — 衡量 SM 利用率
-
 ### 5.1 公式
-
 ```
 Occupancy = active_warps_per_SM / max_warps_per_SM
-
 active_warps_per_SM = min(
     驻留 blocks × (blockDim / 32),
     2048 / 32  (= 64 warps per SM max)
 )
 ```
-
 ### 5.2 三个限制因素
-
 **1. 寄存器限制 (最常见)**
-
 ```
 active_blocks = min(
     SM_register_count / (blockDim × registers_per_thread),
     max_blocks_per_SM  (= 32)
 )
 ```
-
 **2. Shared Memory 限制**
-
 ```
 active_blocks = min(
     SM_shared_memory / shared_memory_per_block,
     max_blocks_per_SM
 )
 ```
-
 **3. Block 数量限制**
-
 ```
 每 SM 最多 32 blocks
 每 SM 最多 2048 threads
 每 block 最多 1024 threads
 ```
-
 ### 5.3 实际计算示例
-
 ```
 环境: A100 (SM80)
   SM_registers = 65536
   SM_shared_memory = 164 KB (configurable)
   SM_max_threads = 2048
   SM_max_blocks = 32
-
 Kernel: blockDim = 256, registers_per_thread = 72, smem_per_block = 8 KB
-
 寄存器限制: 65536/(256×72) = 3.55 → 3 blocks
 SMEM 限制: 164/8 = 20 blocks (不限制)
 线程数限制: 2048/256 = 8 blocks (不限制)
 块数限制: 32 (不限制)
-
 → active_blocks = 3
 → active_warps = 3 × 8 = 24 warps
 → occupancy = 24/64 = 37.5%
 ```
-
 ### 5.4 Occupancy 是不是越高越好?
-
 **不。** 很多高性能 kernel 故意用低 occupancy:
-
 ```cuda
 // 场景: 每个 thread 需要很多寄存器做 tile computation
 // 高 occupancy: 256 threads × 32 regs = 8192, 8 blocks/SM = 64 warps, 100%
 // 低 occupancy: 256 threads × 128 regs = 32768, 2 blocks/SM = 16 warps, 25%
-
 // 但低 occupancy 版本可能更快, 因为:
-//   - 更多寄存器 per thread → 更大 tile → 更少 global memory 访问 (仅当算法有数据复用机会时成立, 如 GEMM/卷积; 详见 8 节末尾注)
+//   - 更多寄存器 per thread → 更大 tile → 更少 global memory 访问
 //   - 更多 ILP (Instruction-Level Parallelism) 在单个 warp 内
 //   - global memory bandwidth 是瓶颈时, 多 warp 也无用
 ```
-
-**结论:** occupancy 是手段不是目的。目标是最小化 latency × bandwidth product, 不是最大化 occupancy。
-
+**结论:** occupancy 是手段不是目的。目标是最小化 wall-clock time, 不是最大化 occupancy。
 ---
-
 ## 6. Latency Hiding — 延迟隐藏详解
-
 > **核心命题:** GPU 的 global memory 延迟是 300—800 cycles, 一条 FMA 指令延迟 4 cycles。如果 warp 每 cycle 都能发射指令, 一个 warp 最多只能连续执行 1-2 条指令就 stall。没有延迟隐藏, GPU 绝大部分时间都在空等。
 > **答案:** 不是消除延迟, 而是用并行让延迟不在关键路径上出现。
-
 ### 6.1 为什么需要延迟隐藏 — 延迟全景图
-
 GPU 内各类操作的典型延迟 (以 A100 @ 1.4 GHz 为例):
-
 | 操作                      | 延迟 (cycles) | 延迟 (ns)  | 说明                         |
 |---------------------------|---------------|------------|------------------------------|
 | 同一 warp 内寄存器转发     | 0             | 0          | 当前指令直接使用上个指令结果 |
 | FMA / ADD / MUL           | 4             | ~2.9       | 普通算术指令                 |
 | SFU (sin, sqrt, rcp)      | 16            | ~11        | 特殊函数单元                 |
-| Shared Memory (bank 无冲突)| ~30           | ~21        | 片上内存                     |
+| Shared Memory (bank 无冲突)| ~30          | ~21        | 片上内存                     |
 | L1 / 常量缓存             | ~30           | ~21        | 片上缓存                     |
 | L2 命中                   | ~200          | ~143       | 片上缓存                     |
 | Global Memory (HBM)       | ~400—800      | ~290—570   | 显存访问 (主要延迟源)        |
 | Atomic (global)           | ~600—1000     | ~430—710   | 原子操作                     |
 | __syncthreads             | ~40           | ~29        | 同步屏障                     |
-
 **关键观察:** 一条 LDG (global load) 的延迟可以执行 100—200 条 FMA。如果 warp 必须等待每次访存结果才能继续, 吞吐率将极低。
-
 **CPU vs GPU 的处理哲学:**
-
 |                    | CPU                               | GPU                                       |
 |--------------------|-----------------------------------|-------------------------------------------|
 | 应对延迟的策略     | 尽量减小延迟                       | 不减小延迟, 隐藏它                         |
 | 手段               | 大缓存 (L1/L2/L3), 分支预测, OoO  | 大量并行线程 + 快速上下文切换              |
 | 晶体管投入         | ~50% 用于缓存 + 控制               | ~80% 用于计算单元 (ALU)                    |
 | 结果               | 单线程极快, 但并行度有限           | 单线程慢, 但数千线程同时运行, 总吞吐极高   |
-
 ---
-
 ### 6.2 核心机制: Warp Scheduling 如何实现延迟隐藏
-
 #### 6.2.1 基本调度流程
-
 每个 SM 内有多个 Warp Scheduler (A100 每 SM Partition 1 个, 共 4 个), 每个 scheduler 管理一组驻留 warp。
-
 ```
 Warp Scheduler 每 cycle 的工作:
   1. 扫描所有管理的就绪 warp (pending queue)
   2. 选择优先级最高的 warp
   3. 通过 Dispatch Unit 将下一条指令发送到执行单元
   4. 被选中的 warp 进入未就绪状态 (等待指令延迟)
-
 就绪 warp 条件:
   - 上一条指令的操作数已就绪 (寄存器/内存数据已到)
   - 执行单元有空闲 (比如 FP32 Core 可用)
   - 指令发射队列未满
 ```
-
 #### 6.2.2 零开销切换 — 时间线示例
-
 假设 4 个 warp, 每个 warp 执行一条 LDG (延迟 300 cycles) + 一条 FMA:
-
 ```
 cycle  ── warp 0 ── ── warp 1 ── ── warp 2 ── ── warp 3 ──
   0     LDG (存 t0)
@@ -326,55 +240,36 @@ cycle  ── warp 0 ── ── warp 1 ── ── warp 2 ── ── war
   307                                             FMA(t3)
   308   done         done          done          done
 ```
-
 **4 个 warp 完成总工作量的时间 = 308 cycles**
 如果没有延迟隐藏 (只能串行执行) = (300 + 4) × 4 = 1216 cycles
 **加速比 ≈ 4×** — 这就是延迟隐藏的直接效果。
-
 > **关键是:** 每次"切换"的成本为零。warp 的寄存器是物理隔离的, Warp Scheduler 只需改变 `warp_id → register_base` 的映射, 不需要保存/恢复上下文。
-
 ---
-
 ### 6.3 三种并行手段: TLP, ILP, MLP
-
 延迟隐藏通过三种并行度实现, 它们可以叠加使用:
-
 #### 6.3.1 TLP — Thread-Level Parallelism (线程级并行)
-
 **核心思路:** 用多个 warp 轮流执行, 当一个 warp 因访存/数据依赖 stall 时, 立刻切换到另一个就绪 warp。
-
 ```
 假设: 每个 warp 每 4 cycles 发射 1 条指令 (instruction issue interval = 4)
       访存延迟 = 400 cycles
-
 需要的 warp 数 ≈ 400 / 4 = 100 warps
-
 但 GPU 每 SM 最多 64 warps → 仅用 TLP 不够!
 ```
-
 **TLP 能隐藏的延迟取决于 warp 数量:**
-
 ```
 hideable_latency_TLP = active_warps × issue_interval
-
 例: 32 warps, 每 4 cycles 发 1 条指令
   → 可隐藏延迟 = 32 × 4 = 128 cycles
   → 实际 LDG 延迟 ~400 cycles → 还有 272 cycles 无法隐藏
 ```
-
-- 默认假设每次发射的指令都是要造成长cycle等待的。
 **结论: TLP 单独不足以完全隐藏 GMEM 延迟。** 必须结合 ILP 和 MLP。
-
 #### 6.3.2 ILP — Instruction-Level Parallelism (指令级并行)
-
 **核心思路:** 单个 warp 内, 一条指令的结果被后续指令需要才形成依赖链。如果指令之间没有数据依赖, Warp Scheduler 可以连续发射这些独立指令, 不 stall。
-
 ```cuda
 // 低 ILP — 每条指令都依赖前一条结果
 float a = load(x[i]);          // LDG, 延迟 400
 float b = a * 2.0f;            // 需要等 a → stall 400 cycles
 float c = b + 1.0f;            // 需要等 b → stall 4 cycles
-
 // 高 ILP — 两条独立的计算链
 float a0 = load(x[i]);         // LDG #1
 float a1 = load(x[i+1]);       // LDG #2 ← 和 LDG #1 独立
@@ -383,20 +278,14 @@ float b1 = a1 * 2.0f;          // 需要等 a1
 // b0 和 b1 之间没有依赖
 // Warp Scheduler 可以在等 a0 的同时发射 LDG #2 和 a1*2 等
 ```
-
 **ILP 对延迟隐藏的贡献:**
-
 ```
 effective_hideable_latency = active_warps × issue_interval × ILP_factor
-
 ILP_factor = warp 内平均并行独立指令流的数量
-
 例: 32 warps, issue_interval = 4, ILP_factor = 4 (循环展开 4 路)
   → 可隐藏延迟 = 32 × 4 × 4 = 512 cycles → 足够覆盖 ~400 cycles LDG!
 ```
-
 **获得 ILP 的方法:**
-
 ```cuda
 // 方法 1: 循环展开 (Loop Unrolling)
 // 4 路展开, 4 条独立的 load + 4 条独立的 FMA
@@ -404,7 +293,6 @@ ILP_factor = warp 内平均并行独立指令流的数量
 for (int i = 0; i < N; i++) {
     sum += a[tid + i * blockDim.x];
 }
-
 // 方法 2: 手工展开 + 交错计算
 float s0 = 0, s1 = 0, s2 = 0, s3 = 0;
 for (int i = 0; i < N; i += 4) {
@@ -415,102 +303,70 @@ for (int i = 0; i < N; i += 4) {
 }
 // 4 条 LDG 互不依赖, 可以同时 "in-flight"
 // 4 个累加器 s0-s3 也互不依赖
-
 ```
-
-- 针对 `#pragma unroll 4` 配合单变量 `sum`：
-
-|控制环节|谁来管|具体行为|
+**深度解析：`#pragma unroll 4` 是如何生成 ILP 的？**
+这里有一个非常容易误解的细节：`#pragma unroll 4` 并不直接等于“你有 4 个独立累加器”。
+| 控制环节 | 谁来管 | 具体行为 |
 |---|---|---|
-|**是否展开**|**手动**（程序员写`#pragma`）|你手动指示编译器复制循环体。|
-|**产生多少个独立累加器（ILP）**|**编译器自动**（受编译选项控制）|如果加 `-use_fast_math`，编译器**自动**将1个`sum`拆成4个隐藏临时寄存器（自动增加寄存器占用）。如果不加，则展开后依然是串行（寄存器只占1个）。|
-|**物理寄存器编号分配**|**编译器自动**|编译器将隐藏的临时变量或显式的 `s0~s3` 映射到具体的物理寄存器编号。|
-|**寄存器数量的硬上限**|**手动**（通过编译参数）|你可以用 `--maxrregcount` 强行封顶，防止编译器自动展开时用爆寄存器导致Occupancy骤降。|
-
-- **如果代码里只有 `#pragma unroll 4` 和一个 `sum`**：  
-    想要真正获得4路ILP，**必须在编译时加上 `-use_fast_math`**，让编译器帮你做“自动累加器拆分”。否则，展开只是减少了循环分支跳转开销，**并没有隐藏内存延迟**。
+| **是否展开** | **手动**（程序员写`#pragma`） | 你手动指示编译器复制循环体。 |
+| **产生多少个独立累加器（ILP）** | **编译器自动**（受编译选项控制） | 如果加 `-use_fast_math`，编译器**自动**将1个`sum`拆成4个隐藏临时寄存器（自动增加寄存器占用）。如果不加，则展开后依然是串行（寄存器只占1个）。 |
+| **物理寄存器编号分配** | **编译器自动** | 编译器将隐藏的临时变量或显式的 `s0~s3` 映射到具体的物理寄存器编号。 |
+| **寄存器数量的硬上限** | **手动**（通过编译参数） | 你可以用 `--maxrregcount` 强行封顶，防止编译器自动展开时用爆寄存器导致Occupancy骤降。 |
+- **如果代码里只有 `#pragma unroll 4` 和一个 `sum`**：  
+  想要真正获得4路ILP，**必须在编译时加上 `-use_fast_math`**，让编译器帮你做“自动累加器拆分”。否则，展开只是减少了循环分支跳转开销，**并没有隐藏内存延迟**。
 - **如果想要可控、确定的ILP**：  
-    请使用**方法2（手工展开 `s0,s1,s2,s3`）**。这样**不需要依赖编译器魔法**，寄存器占用也**一目了然**（你写几个变量，基本就占几个寄存器），且不需要开启可能影响浮点数精度（如NaN处理）的 `-use_fast_math`。
-- **寄存器不会“自动凭空消失”**：无论是编译器自动拆分，还是你手动写 `s0~s3`，这些临时变量**最终都占物理寄存器**。如果寄存器用多了，SM上能同时驻留的Warp数（Occupancy）就会下降，你需要用 `--maxrregcount` 来权衡取舍。
-
-- **注**：
-**“同一时刻”** 和 **“连续时钟周期”** 分开，并从“结果如何保存”这个物理层面切入讲解。
-
-6.3.2.1 核心误解澄清：同一Warp执行同一指令 vs 连续发射不同指令
-
+  请使用**方法2（手工展开 `s0,s1,s2,s3`）**。这样**不需要依赖编译器魔法**，寄存器占用也**一目了然**（你写几个变量，基本就占几个寄存器），且不需要开启可能影响浮点数精度（如NaN处理）的 `-use_fast_math`。
+- **寄存器不会“自动凭空消失”**：无论是编译器自动拆分，还是你手动写 `s0~s3`，这些临时变量**最终都占物理寄存器**。如果寄存器用多了，SM上能同时驻留的Warp数（Occupancy）就会下降，你需要用 `--maxrregcount` 来权衡取舍。
+---
+**深度解析：核心误解澄清 — 同一 Warp 执行同一指令 vs 连续发射不同指令**
 - **同一时刻（一个时钟周期）**：Warp内的32个线程**确实**执行**同一条**指令（SIMT）。例如，在Cycle N，所有32个线程都在执行 `LDG #1`。
 - **连续发射（下一个时钟周期）**：Warp Scheduler可以在Cycle N+1（或隔几个周期）**再次**发射**同一条Warp的下一条**指令（例如 `LDG #2`），只要这条新指令**不依赖**上一条指令的结果。
-
-**结论**：Warp Scheduler发的是“指令流”，不是“锁步卡死”。它允许同一个Warp在时间轴上**错开**发射多条**不同地址**的独立指令，让这些指令在流水线中“飞行（in-flight）”。
-
-
-6.3.2.2 不同指令的运算结果如何保存？（寄存器文件机制）
-
-这是你问题的核心。GPU拥有一个巨大的**物理寄存器文件（Register File， RF）**，且是**多端口（Multi-ported）**或**分体（Banked）**设计的。
-
+**结论**：Warp Scheduler发的是“指令流”，不是“锁步卡死”。它允许同一个Warp在时间轴上**错开**发射多条**不同地址**的独立指令，让这些指令在流水线中“飞行”。
+---
+**深度解析：不同指令的运算结果如何保存？（寄存器文件机制）**
+GPU拥有一个巨大的**物理寄存器文件（Register File， RF）**，且是**多端口**或**分体**设计的。
 当Warp Scheduler连续发射指令时，结果保存遵循以下严格规则：
-
-  1. **每线程私有寄存器**：Warp内每个线程都有自己独立的物理寄存器编号（例如 `R0`~`R255`）。
-  2. **指令携带目标寄存器（dstu）**：每条指令在译码时，就已经固定了**目标寄存器地址**（例如 `LDG #1` 的结果存入 `R8`，`LDG #2` 的结果存入 `R12`）。
-  3. **写回（Write-Back）时的冲突避免**：
+1.  **每线程私有寄存器**：Warp内每个线程都有自己独立的物理寄存器编号（例如 `R0`~`R255`）。
+2.  **指令携带目标寄存器**：每条指令在译码时，就已经固定了**目标寄存器地址**（例如 `LDG #1` 的结果存入 `R8`，`LDG #2` 的结果存入 `R12`）。
+3.  **写回时的冲突避免**：
     - 如果Cycle N发射`LDG #1`（目标`R8`），Cycle N+1发射`LDG #2`（目标`R12`）。
-    - 虽然加载内存需要400个周期才返回，但当数据从内存返回时，**写回单元（Load Store Unit）**会根据指令附带的“Warp ID + 线程Lane ID + 目标寄存器号”，将数据**精准推入**寄存器文件的对应槽位。
+    - 虽然加载内存需要400个周期才返回，但当数据从内存返回时，**写回单元**会根据指令附带的“Warp ID + 线程Lane ID + 目标寄存器号”，将数据**精准推入**寄存器文件的对应槽位。
     - 因为目标寄存器物理地址不同（R8 vs R12），写回时**不会发生数据冲突**，它们会各自占据寄存器文件中的不同物理Bank或不同行。
-
 **举个物理映射例子**：对于Warp中的Thread 0，`LDG #1`结果存到`R8[0]`，`LDG #2`存到`R12[0]`；对于Thread 1，则存到`R8[1]`和`R12[1]`。完全隔离，互不干扰。
-
-
-6.3.2.3 完整的GPU发射Warp指令机制（含ILP调度）
-
+---
+**深度解析：完整的 GPU 发射 Warp 指令机制（含 ILP 调度）**
 GPU的Warp Scheduler并不是“发射完一条就死等结果”，它的调度机制如下（以你提供的ILP代码为例）：
-
 | 时间周期 | Warp Scheduler动作 | 流水线状态（延迟隐藏） | 寄存器保存状态 |
 | :--- | :--- | :--- | :--- |
-| **Cycle 0** | 发射 **LDG #1** (`a0`) | 将访存请求发给L1/TEX，**不等待数据返回**，该指令进入“等待队列（Pending）” | 目标寄存器`R0`被标记为“等待写回”，但尚未赋值 |
-| **Cycle 1** | 检查LDG #1依赖？<br>**不依赖**（因为LDG #2不需要a0）<br>→ 发射 **LDG #2** (`a1`) | 第二个访存请求发出，此时两个400周期的延迟**重叠（Overlap）** 进行 | 目标寄存器`R1`被标记为“等待写回” |
+| **Cycle 0** | 发射 **LDG #1** (`a0`) | 将访存请求发给L1/TEX，**不等待数据返回**，该指令进入“等待队列” | 目标寄存器`R0`被标记为“等待写回” |
+| **Cycle 1** | 检查LDG #1依赖？<br>**不依赖** → 发射 **LDG #2** (`a1`) | 第二个访存请求发出，此时两个400周期的延迟**重叠** 进行 | 目标寄存器`R1`被标记为“等待写回” |
 | **Cycle 2** | 检查LDG #2依赖？<br>不依赖（`b0`需要`a0`，但此时`a0`没回来）<br>→ **不能发射FMA #1**（依赖阻塞）<br>→ 切换发射**其他Warp**（TLP） | 或者，如果该Warp还有更多独立LDG（如#3、#4），继续发射 | - |
-| **~Cycle 400** | 内存数据返回 | 写回单元将数据同时/依次写入`R0`和`R1`（物理地址不同，无冲突） | 寄存器`R0`、`R1`变为有效（Valid） |
+| **~Cycle 400** | 内存数据返回 | 写回单元将数据同时/依次写入`R0`和`R1`（物理地址不同，无冲突） | 寄存器`R0`、`R1`变为有效 |
 | **Cycle 401** | 发射 **FMA #1** (`b0 = a0*2`) | 读取`R0`（数据已就绪），计算后写入`R2` | 结果存入`R2` |
 | **Cycle 402** | 发射 **FMA #2** (`b1 = a1*2`) | 读取`R1`（数据已就绪），计算后写入`R3` | 结果存入`R3` |
-
-**关键点**：Scheduler内部有一个**记分板（Scoreboard）**，它实时监控每条指令的**源寄存器（Src）**是否就绪。只有当前指令的所有源寄存器都已有效，Scheduler才会将其发射到执行单元。
-
-
-6.3.2.4 针对公式的物理含义解释
-
+**关键点**：Scheduler内部有一个**记分板**，它实时监控每条指令的**源寄存器（Src）**是否就绪。只有当前指令的所有源寄存器都已有效，Scheduler才会将其发射到执行单元。
+---
+**深度解析：针对公式的物理含义解释**
 公式：`effective_hideable_latency = active_warps × issue_interval × ILP_factor`
-
 这里的 `ILP_factor = 4`（4路展开）在硬件上表现为：
-
 - **寄存器占用翻倍**：原本只需要1个累加器（`sum`），现在需要4个（`s0, s1, s2, s3`）。
 - **指令流发射槽**：Warp Scheduler在等待第一次 `LDG` 返回的400周期里，**不必闲下来**，它可以连续为该Warp发射后续的3条独立 `LDG` 指令（利用`issue_interval`，比如每4个周期能发一条），这就是 `ILP_factor` 对隐藏延迟的贡献。
-- 一个 Warp Scheduler **在理想情况下每个周期都能发射一条指令**，但这里的“每个周期”是指 **Scheduler 本身** 的发射能力，而我们讨论的 `issue_interval` 是指 **被调度的 Warp** 的实际发射间隔。
-
-**但请注意一个硬性限制**：虽然ILP能隐藏延迟，但**硬件发射宽度（Issue Width）**有限。NVIDIA GPU（如Volta之后）一个Warp Scheduler每个时钟周期最多只能发射**1条**指令给该Warp（某些架构支持双发射，但极少见）。所以在Cycle 1发射LDG #2，不代表Cycle 0和Cycle 1同时执行，而是**时分复用**了发射端口。
-
-
-6.3.2.5 ILP的代价（寄存器压力）为什么影响驻留Warp数？
-
+**但请注意一个硬性限制**：虽然ILP能隐藏延迟，但**硬件发射宽度**有限。NVIDIA GPU（如Volta之后）一个Warp Scheduler每个时钟周期最多只能发射**1条**指令给该Warp（某些架构支持双发射，但极少见）。所以在Cycle 1发射LDG #2，不代表Cycle 0和Cycle 1同时执行，而是**时分复用**了发射端口。
+---
+**深度解析：ILP 的代价（寄存器压力）与驻留 Warp 数**
 GPU的寄存器文件总量是固定的（例如每个SM有65536个32-bit寄存器）。
-
 - **低ILP**：1个线程只用10个寄存器，SM可驻留 `65536 / (10 * 32线程/Warp * Warp数) ≈ 204` 个线程（即大量Warp）。
 - **高ILP（4路展开）**：每个线程需要40个寄存器，可驻留线程数直接**除以4**。
-
 **平衡点**：如果寄存器太少（ILP低），Warp数多但每个Warp都在Stall等内存；如果寄存器太多（ILP高），Warp数少，一旦所有Warp都发射完独立指令，最终还是得等内存。所以**最佳实践**是用足够的ILP（如4~8路）填满内存延迟，但不要过度展开导致Occupancy（驻留率）暴跌，导致没有额外的Warp来切换隐藏剩余延迟。
-
 总结一句话：**“同一Warp同一时刻执行同一指令”是空间上的同步；“连续发射不同独立指令”是时间上的流水。结果通过“线程私有 + 不同目标寄存器物理地址”完美隔离保存，互不覆盖。**
 > **ILP 的代价:** 更多的寄存器。每个独立的累加器需要寄存器, 4 路展开就需要 4× 寄存器 → 减少了可驻留 warp 数 (←→ TLP 的平衡)。
-
 #### 6.3.3 MLP — Memory-Level Parallelism (内存级并行)
-
 **核心思路:** 一个 warp 可以发出多个**未完成**的内存请求, 然后一起等待。GPU 的 memory controller 可以同时处理多个 pending 请求。
-
 ```cuda
 // 低 MLP: 一次只发 1 个 4-byte 请求
 float v0 = data[tid];          // LDG #1 → stall 400 cycles → 数据回来
 // 然后才能发下一个
 float v1 = v0+data[tid + N];      // LDG #2 → stall 400 cycles
-
 // 高 MLP: 一次发 4 个 4-byte 请求
 float v0 = data[tid];          // LDG #1
 float v1 = data[tid + N];      // LDG #2 (不依赖 #1, 立即发射)
@@ -519,29 +375,19 @@ float v3 = data[tid + 3*N];    // LDG #4 (不依赖 #1,#2,#3)
 // 4 个 LDG 在完全不同的地址上, memory controller 可以并行处理
 // 总等待时间 ≈ 1 × 400 cycles (而不是 4 × 400)
 ```
-
 **MLP 的限制因素:**
-
 1. **Memory 带宽:** 如果所有请求加起来已经打满 HBM 带宽, 更多的 MLP 不会提升速度。
 2. **Scoreboard 容量:** GPU 硬件跟踪每个 warp 未完成的寄存器写入。每个 warp 可同时 in-flight 的 LDG 数是有限的 (通常 16—32 个)。
 3. **请求合并:** 如果多个 LDG 访问连续地址 (coalesced), 它们被合并成一次大请求, 不产生额外 MLP 收益。
-
 **MLP 在 Intel Xe / AMD CDNA 上也类似存在, 是 GPU 架构共同特征。**
-
 ---
-
 ### 6.4 统一延迟隐藏模型 — 数学框架
-
 将三种手段统一到一个公式:
-
 ```
 warp 发出指令到结果就绪 → stall
 stall 期间, Warp Scheduler 切换到其他 warp
-
 要完全隐藏延迟需要满足:
-
   active_warps × issue_width × ILP_factor × MLP_factor ≥ latency / issue_interval
-
 其中:
   active_warps  ─  当前 SM 驻留的 warp 数 (由 occupancy 决定)
   issue_width   ─  每 cycle 可发射指令数 (A100: 2 per warp scheduler)
@@ -549,232 +395,171 @@ stall 期间, Warp Scheduler 切换到其他 warp
   MLP_factor    ─  每个 warp 同时 in-flight 的独立内存请求数
   latency       ─  目标隐藏的延迟 cycles
   issue_interval ─ warp 两次成功发射之间的 cycles (通常 4)
-
 → 不考虑 ILP/MLP 时, 纯 TLP 所需 warp 数:
   required_warps = latency / (issue_width × issue_interval)
                   = 400 / (2 × 4) = 50 warps  ← 接近 A100 极限 64
-
 → 考虑 4 路 ILP 后:
   required_warps = 400 / (2 × 4 × 4) = 12.5 ≈ 13 warps
           即 20% occupancy 就够!
-
 → 考虑 4 路 ILP + 4 路 MLP 后:
   required_warps = 400 / (2 × 4 × 4 × 4) = 3.1 ≈ 4 warps
           即 6% occupancy 就够!
 ```
-
 **实际计算验证:**
-
 | 配置                       | ILP | MLP | 所需 warps | 等效 occupancy | 适用场景           |
 |----------------------------|-----|-----|-----------|----------------|--------------------|
 | 简单 vector add            | 1   | 1   | 50        | ~78%           | 带宽敏感           |
 | 4 路展开 vector add        | 4   | 1   | 13        | ~20%           | 带宽敏感+计算混合  |
 | 4×4 GEMM 微内核            | 4   | 4   | 4         | ~6%            | 计算密集型 (GEMM)  |
 | 8 路展开 + 软件 prefetch   | 8   | 4   | 2         | ~3%            | 计算极密集          |
-
 ---
-
 ### 6.5 TLP vs ILP — 寄存器预算与 Occupancy 的权衡
-
 **核心矛盾:** 寄存器总量是固定的 (A100 SM: 65536 个 32-bit 寄存器)。寄存器分配给 warp 越多, 能驻留的 warp 越少:
-
 ```
 SM 寄存器预算:
-
 TLP 策略 (256 threads/block, 16 regs/thread):
   每 block: 256 × 16 = 4096 寄存器
   可驻留 block: 65536 / 4096 = 16 blocks
   总 warp: 16 × 8 = 128 → 上限 64 → occupancy 100%
   每个 warp 寄存器: 16 × 32 = 512
-
 ILP 策略 (256 threads/block, 64 regs/thread):
   每 block: 256 × 64 = 16384 寄存器
   可驻留 block: 65536 / 16384 = 4 blocks
   总 warp: 4 × 8 = 32 warps → occupancy 50%
   每个 warp 寄存器: 64 × 32 = 2048
 ```
-
 **选择指南:**
-
 | 场景                                 | 推荐策略 | 原因                                                         |
 |--------------------------------------|----------|--------------------------------------------------------------|
 | 内存带宽敏感 (copy, add, scale)      | TLP      | 瓶颈在带宽, 需要多 warp 来饱和 HBM                           |
 | 计算受限 (matmul large tile)         | ILP      | 计算本身已掩盖访存, 更多寄存器提升 tile 大小                  |
 | 混合 (stencil, reduction)            | 平衡     | 需要一定 TLP 保证带宽利用, 也需要 ILP 减少访存次数            |
 | 延迟敏感 (pointer chasing, graph)    | 高 TLP   | 无法预取, 只能靠最大 warp 数来隐藏延迟                       |
-
 > **重要认识:** Occupancy (TLP) 和 ILP 都是延迟隐藏的手段, 不是目的。最终指标是 wall-clock time。
 > 很多高性能 kernel (cuBLAS, CUTLASS GEMM) 的 occupancy 只有 25-50%, 但比 100% occupancy 的 naive 实现快 10×+。
 > 原因: ILP 提升带来了更少的 global memory 访问 (更大 tile), 抵消了 occupancy 的损失。
-
 ---
-
 ### 6.6 延迟隐藏的局限性 — 什么时候隐藏不了?
-
 #### 6.6.1 所有 warp 同时 stall
-
 **最坏场景:** 所有 warp 都在等待同一种资源, 没有就绪的 warp 可以切换。
-
 ```cuda
 // 场景 1: 所有 warp 都做 global load, 打满 HBM 带宽
 // → 所有 warp 都在等数据回来 → Warp Scheduler 无 warp 可切
 // → 实际延迟 = 访存延迟, 隐藏失败
-
 // 场景 2: 严重的 shared memory bank conflict
 // → 所有 warp 都在 bank conflict 中串行化
-
 // 场景 3: 所有 warp 都在等 __syncthreads
 // → 阻塞在 barrier, 无 warp 可调度
 ```
-
 **如何诊断:** 使用 NVIDIA Nsight Compute (ncu) 查看 stall reason:
-
 ```
 Metric: sm__pipeline_util_count_warps / sm__warp_active.avg.pct_of_peak_sustained_elapsed
-
 主要 stall reasons:
   long_scoreboard  — 等待 global/local memory (高延迟访存)
   short_scoreboard — 等待共享内存/常量/纹理
-  not_selected     — warp 就绪但 scheduler 没选它 (说明已经够快!)
+  not_selected     — warp 就绪但 scheduler 没选它 (说明已经够快! )
   wait             — 等待 barrier (__syncthreads)
   no_instruction   — 等待指令 fetch
 ```
-
 #### 6.6.2 带宽墙 — 无法突破的物理限制
-
 延迟隐藏可以隐藏延迟, 但**不能隐藏带宽限制**:
-
 ```
 隐藏延迟 → 提高吞吐 → 打满 HBM 带宽 → 到达物理极限 → 无法更快
-
 假设 A100 HBM 带宽 = 2039 GB/s, kernel 需要 2500 GB/s → 无论多少 warp, 一定跑不满
 ```
-
 **结论:** 如果你的 kernel 已经打满内存带宽, 再多的 warp 也不会提速。此时优化方向是减少访存量 (更好的算法/更大的 tile/更高效的 cache 利用) 而不是增加 occupancy。
-
 #### 6.6.3 不适用延迟隐藏的场景
-
 某些 GPU 工作负载不适合用 TLP/ILP 隐藏延迟:
-
 | 场景                          | 为什么不适用                                        | 替代方案               |
 |-------------------------------|-----------------------------------------------------|------------------------|
 | Pointer chasing / 链表遍历    | 每个 load 的地址依赖上一个 load 的结果, 不能预取     | 尽可能用加速器/合并访问 |
 | 图遍历 / BFS                  | 访存模式随机, 无法 coalesce, ILP/MLP 收益有限        | 用 TLP 尽量填满带宽    |
 | 强同步依赖算法               | 频繁 __syncthreads 破坏 warp 交错                    | 减少同步点, 重新设计   |
-
 ---
-
 ## 7. Warp-Level Primitives 简介 (预告)
-
 在同一个 warp 内的 32 个线程之间, GPU 提供极高效的数据交换机制:
-
 ```cuda
 // warp shuffle — 寄存器间直接交换, 延迟 ~5 cycles
 float val = __shfl_down_sync(0xffffffff, my_val, delta);
-
 // warp vote — 全局同步原语
 int all_true = __all_sync(0xffffffff, condition);
 int any_true = __any_sync(0xffffffff, condition);
 int ballot   = __ballot_sync(0xffffffff, condition);
 ```
-
 这是下一章 `05_warp_shuffle_primitives.md` 的主题。
-
 ---
-
 ## 8. 面试高频问题
-
 ### Q1: 什么是 warp? 为什么是 32?
 **答:** Warp 是 GPU 硬件调度的最小单位, 包含 32 个线程。32 是 NVIDIA 的硬件设计选择, 刚好映射到 SM Partition 的执行单元宽度。AMD 的 wavefront 是 64。
-
 ### Q2: SIMT 和 SIMD 有什么区别?
 **答:** SIMD (CPU AVX) 需要显式使用向量寄存器, 固定宽度。SIMT (GPU) 允许标量编程, 硬件自动向量化, 支持线程级分支, 每个线程独立地址空间。
-
 ### Q3: 什么是 Warp Divergence? 怎么避免?
 **答:** Warp 内不同线程走不同分支 → 两条路径串行执行 → 效率减半。避免方法: 让分支条件在 warp 级别一致 (如条件基于 warp_id 而非 lane_id), 或把分支替换为条件计算。
-
 ### Q4: GPU 的零开销线程切换怎么做到的?
 **答:** 每个 warp 有自己物理隔离的寄存器堆。切换 warp 只需 Warp Scheduler 改变指向的寄存器基地址, 不需要保存/恢复任何上下文。CPU 线程切换需要 ~1μs, GPU 是 0 cycle。
-
 ### Q5: Occupancy 怎么算? 受什么限制?
 **答:** `active_warps/max_warps`。受三方面限制: (1) 每 SM 65536 寄存器, (2) 每 SM 最大 164KB shared memory, (3) 每 SM 最多 2048 threads / 32 blocks。
-
 ### Q6: 什么时候低 occupancy 比高 occupancy 更好?
-**答:** 当瓶颈是内存带宽或每个 thread 需要大量寄存器做 compute 时。更多寄存器 per thread 意味着更大的 tile → 更高数据复用率 → 更少 global memory 访问 (前提是算法本身有复用机会, 如 GEMM, 详见下方注解)。很多高性能 GEMM kernel 故意用 25-50% occupancy。
-
-### 注：
-在GPU编程中，**Tile（瓦片/分块）** 指的是**单个线程（或线程块）在一次计算任务中，负责处理的连续数据块大小**。
-- **在共享内存层面**（经典Tiling）：把大矩阵切成小方块（Tile），加载到共享内存中供Block内线程复用，减少全局内存访问。 
-- **在寄存器层面**（你问的这个语境）：**单个线程在一次循环迭代中，加载到寄存器并参与计算的元素个数**。  
-**举个例子**：  
-假设你要做向量加法 `C[i] = A[i] + B[i]`。
-- **Tile = 1**（低ILP）：线程每次只加载 `A[0]` 和 `B[0]`，算完存回 `C[0]`，然后循环下一次。 
-- **Tile = 4**（高ILP/展开）：线程一次性加载 `A[0]~A[3]` 和 `B[0]~B[3]` 到寄存器（`a0,a1,a2,a3`），算出 `c0~c3`，最后一次性写回。
-**在这个语境下，“更大的Tile”就是指“单个线程每次处理更多的数据元素”。**
-
-### 如何理解“更多寄存器 per thread → 更大的 tile → 更少 global memory 访问”？
-
-**重要前提（容易踩坑的地方）：** 这句话只在**算法存在数据复用机会**时才成立。对纯逐元素算子（vector add、elementwise scale 等）和有复用机会的算子（GEMM、卷积、stencil）要分开理解，结论完全不同。
-
-#### 0. 先排除一个误解：vector add 加大 tile 并不会减少 global memory 流量
-
-```cuda
-// Tile=1: 每次迭代处理1个元素
-c[i] = a[i] + b[i];   // 1 次读 a + 1 次读 b + 1 次写 c
-
-// Tile=4 (循环展开4路): 每次迭代处理4个元素
-c[i+0..3] = a[i+0..3] + b[i+0..3];   // 仍然是 4 次读 a + 4 次读 b + 4 次写 c
-```
-
-无论 Tile=1 还是 Tile=4，**每个输出元素需要的 global memory 字节数完全不变**——a、b 各读一次，c 写一次，没有任何一个值被复用了第二次。展开只是减少了循环开销、提升了 ILP/MLP（多个 load 同时 in-flight，参考 6.3.3），从而更好地隐藏延迟，**但没有减少总访存量**。这类算子是纯带宽受限 (bandwidth-bound)，理论下限就是 `2×读 + 1×写`，tile 大小改变不了这个下限。
-
-#### 1. 真正能“靠更大 tile 减少 global memory 访问”的，是有数据复用的算法
-
-关键词是**数据复用 (Data Reuse)**：同一份从 global memory 搬到寄存器的数据，被**多条独立的计算指令重复使用**，而不是用一次就丢弃。
-
-**GEMM 寄存器分块的例子 (`C = A × B`)：**
-
-```
-朴素版本 (无复用): 每算 1 个 C[i][j] = Σ A[i][k]*B[k][j]
-  → 每次 FMA 都要重新读 1 个 A 元素 + 1 个 B 元素
-  → 1 次 FMA (2 FLOPs) 消耗 2 次 global load
-  → 算术强度 (arithmetic intensity) = 2 FLOPs / 2 loads = 1 FLOP/load
-
-4×4 寄存器分块版本 (寄存器里复用):
-  把 A 的 1 列 4 个元素 a0~a3、B 的 1 行 4 个元素 b0~b3 一次性读入寄存器
-  → 做 4×4 = 16 次外积 FMA (32 FLOPs)，只用了 8 次 global load (4 个 a + 4 个 b)
-  → 算术强度 = 32 FLOPs / 8 loads = 4 FLOPs/load
-
-  → 相同的 a0 被 b0,b1,b2,b3 复用了 4 次；相同的 b0 也被 a0,a1,a2,a3 复用了 4 次
-  → 对于同样的计算总量 (FLOPs)，global memory 访问量直接降为 1/4
-```
-
-**这才是“更大 tile → 更少 global memory 访问”的真正机制：tile 越大，每个从 global memory 搬入寄存器的数据，能服务的 FMA 数量越多 (复用次数越多)，单位计算量摊到的访存字节数就越少。** cuBLAS / CUTLASS 的 GEMM kernel 之所以用很大的寄存器 tile (比如 8×8 甚至更大)，本质就是在最大化这个复用率，把算术强度推高到接近 GPU 的 compute:bandwidth ratio，从而把瓶颈从“带宽受限”转移到“计算受限”。
-
-#### 2. 寄存器数量决定 tile 上限，也决定了 occupancy 的代价
-
-如果一次性要保存 4×4=16 个累加结果 + 8 个输入寄存器，每线程的寄存器需求显著上升 → 可驻留的 warp 数下降 (occupancy 降低，参考 5.4)。这就是为什么“更大 tile / 更高复用率”和“高 occupancy”是互相冲突的两个目标，GEMM kernel 选择牺牲 occupancy 来换取更高的算术强度。
-
-#### 3. 一句话总结
-
-| 算子类型 | 增大 tile 的效果 |
-|---|---|
-| 无复用机会 (vector add, copy, elementwise) | 不减少 global memory 流量；只提升 ILP/MLP，帮助延迟隐藏 |
-| 有复用机会 (GEMM, 卷积, stencil) | 真正减少 global memory 流量；复用次数 ↑ → 算术强度 ↑ → 访存瓶颈缓解，代价是 occupancy 下降 |
+**答:** 当瓶颈是内存带宽或每个 thread 需要大量寄存器做 compute 时。更多寄存器 per thread 意味着更大的 tile → 更高数据复用率 → 更少 global memory 访问。
+>这段话的核心在于区分**“为了计算速度而多拿数据（循环展开）”**和**“为了复用数据而多拿数据（算法分块）”**这两种完全不同的场景。简单来说，Tile 变大到底能不能省流量，取决于你拿进来的数据是“用一次就扔”还是“反复用”。
+``
+### 1. 核心前提：看数据有没有“复用机会”
+这句话“更多寄存器 per thread → 更大的 tile → 更少 global memory 访问”**只对算法本身需要复用数据的场景成立**（如矩阵乘法、卷积）。对于简单的“一个萝卜一个坑”的运算（如向量加法），它是不成立的。
+---
+### 2. 误区：为什么 Vector Add 加大 Tile 并不能省流量？
+**场景：** `C = A + B`（逐元素相加）。每个输出 `C[i]` 只需要 `A[i]` 和 `B[i]`，用完就扔，下一轮计算 `C[i+1]` 完全不需要 `A[i]` 了。
+*   **Tile = 1（朴素版）：**
+    *   每次迭代处理 1 个元素。
+    *   流量：读 1 个 A，读 1 个 B，写 1 个 C。
+*   **Tile = 4（展开/寄存器加大版）：**
+    *   每次迭代一次性把 `A[i]~A[i+3]` 和 `B[i]~B[i+3]` 都读到寄存器里，算完再写回。
+    *   流量：读 4 个 A，读 4 个 B，写 4 个 C。
+**结论：**
+无论 Tile 是多大，产生 1 个结果 `C[i]`，你**必须**去 Global Memory 读 1 次 A 和 1 次 B。这是物理定律，没法省。
+**那么加大 Tile 有什么用？**
+*   它把 4 次独立的内存访问请求变成了连续的 1 次大块访问，提升了带宽利用率。
+*   它让 4 条计算指令可以在寄存器里连续进行，利用了 **ILP（指令级并行）**。
+*   它让多个 load 指令同时飞在内存总线上，利用了 **MLP（内存级并行）**。
+*   **总结：** 它能**隐藏延迟**，让计算单元别闲着，但它**不能减少总流量**。如果瓶颈在于显存带宽不够大（带宽受限），加大 Tile 并不能提速。
+---
+### 3. 真相：GEMM 为什么能靠加大 Tile 省流量？
+**场景：** `C = A × B`（矩阵乘法）。
+计算一个 `C[i][j]` 需要累加：`A[i][0]*B[0][j] + A[i][1]*B[1][j] + ...`
+这里 `A[i][0]` 这个数据，在计算 `C[i][0], C[i][1], C[i][2]...` 时都要用到。这就是**数据复用**。
+*   **朴素版本（无 Tile，不复用）：**
+    *   算 `C[i][0]` 时，去读 `A[i][0]`。
+    *   算 `C[i][1]` 时，**又去读一次** `A[i][0]`。
+    *   结果：为了利用这个数据，你反复去访问慢速的 Global Memory。
+    *   **算术强度（计算量/访存量）极低**，大部分时间都在等数据。
+*   **大 Tile 版本（寄存器复用）：**
+    *   利用“更多寄存器”，你一次性把 `A[i][0]` 读到寄存器里。
+    *   然后在寄存器里，拿这个 `A[i][0]` 去乘 `B[0][0]`, `B[0][1]`, `B[0][2]`...
+    *   **关键点：** `A[i][0]` 只读了一次 Global Memory，但在寄存器里被用了 N 次。
+    *   **结果：** 对于同样的计算任务，去 Global Memory 的次数大幅减少（可能减少为 1/N）。
+**这才是“更多寄存器 → 更大 Tile → 更少 Global Memory 访问”的真相：**
+寄存器在这里扮演了**高速缓存**的角色。Tile 越大，意味着你能把越多的“常用数据”锁在寄存器里，不用每次都跑去慢速的显存里取。这直接提升了**算术强度**，把瓶颈从“等数据（内存受限）”变成了“算不动（计算受限）”。
+---
+### 4. 代价：天下没有免费的午餐（寄存器 vs Occupancy）
+既然大 Tile 这么好，为什么不把所有数据都塞进寄存器？
+*   **资源有限：** GPU 的寄存器总量是固定的（比如一个 SM 只有 65536 个）。
+*   **Occupancy（占用率）下降：** 如果每个线程都很贪心，霸占了很多寄存器来存大 Tile，那么一个 SM 上能同时驻留的线程数就会变少。
+    *   线程太少，万一某个线程在等内存，没有别的线程可以切过去执行，延迟就隐藏不掉了。
+*   **平衡：** 高性能 Kernel（如 cuBLAS）会故意降低 Occupancy，换来大 Tile。虽然并发的线程少了，但每个线程的计算效率极高（数据都在寄存器里，不怎么用跑内存），总体反而更快。
+---
+### 5. 一句话总结
+| 算子类型 | 增大 Tile (即增加寄存器使用) 的效果 |
+| :--- | :--- |
+| **无复用** <br>(Vector Add, Copy) | **不省流量**。无论拿多少寄存器，该读的数据一个都不能少。<br>作用：提升 ILP/MLP，帮忙**隐藏延迟**。 |
+| **有复用** <br>(GEMM, Convolution) | **大幅省流量**。把数据读一次，在寄存器里反复用。<br>作用：提升**算术强度**，突破带宽瓶颈。<br>代价：Occupancy 降低（并发线程变少）。 |``
 
 ---
-
 ## 9. 参考链接
-
 - [CUDA C++ Programming Guide - SIMT Architecture](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#simt-architecture)
 - [CUDA C++ Programming Guide - Hardware Multithreading](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#hardware-multithreading)
 - [NVIDIA Volta Architecture Whitepaper - Independent Thread Scheduling](https://images.nvidia.com/content/volta-architecture/pdf/volta-architecture-whitepaper.pdf)
 - [CUDA Occupancy Calculator](https://docs.nvidia.com/cuda/cuda-occupancy-calculator/index.html)
-
 ---
-
 ## 10. 学习检查清单
-
 - [ ] 理解 warp = 32 threads, lane_id = threadIdx.x % 32
 - [ ] 知道 SIMT 和 SIMD 的区别 (编程模型 vs 执行模型)
 - [ ] 理解 warp scheduler 如何零开销切换
